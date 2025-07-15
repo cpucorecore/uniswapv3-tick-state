@@ -7,20 +7,20 @@ import (
 	"time"
 )
 
-var Logger *zap.Logger
+var Log *zap.Logger
 
 func init() {
 	InitLoggerForTest()
 }
 
 func InitLoggerForTest() {
-	Logger, _ = zap.NewDevelopment()
+	Log, _ = zap.NewDevelopment()
 	return
 }
 
 func InitLogger() {
 	if !G.Log.Async {
-		Logger, _ = zap.NewDevelopment()
+		Log, _ = zap.NewDevelopment()
 		return
 	}
 
@@ -40,5 +40,5 @@ func InitLogger() {
 		zapcore.DebugLevel,
 	)
 
-	Logger = zap.New(core)
+	Log = zap.New(core)
 }

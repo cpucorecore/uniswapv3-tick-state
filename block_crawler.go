@@ -13,10 +13,6 @@ import (
 	"time"
 )
 
-type Iterable interface {
-	Next() *BlockReceipt
-}
-
 type BlockCrawler interface {
 	Start()
 	GetStartHeight(startHeight uint64) uint64
@@ -41,7 +37,7 @@ type blockCrawler struct {
 	headerHeight     uint64
 }
 
-func NewBlockGetter(
+func NewBlockCrawler(
 	ethClient *ethclient.Client,
 	wsEthClient *ethclient.Client,
 	sequencer Sequencer[*BlockReceipt],
@@ -117,7 +113,7 @@ func (bc *blockCrawler) Start() {
 			select {
 			case blockNumber, ok := <-bc.queue:
 				if !ok {
-					Logger.Info("blockCrawler queue closed")
+					Log.Info("blockCrawler queue closed")
 					break tagFor
 				}
 
@@ -126,7 +122,7 @@ func (bc *blockCrawler) Start() {
 					defer wg.Done()
 					bw, err := bc.getBlockRetry(blockNumber)
 					if err != nil {
-						Logger.Error("get block err", zap.Uint64("height", blockNumber), zap.Error(err))
+						Log.Error("get block err", zap.Uint64("headerHeight", blockNumber), zap.Error(err))
 						return
 					}
 					bc.sequencer.Commit(bw, bc.buffer)
@@ -135,9 +131,9 @@ func (bc *blockCrawler) Start() {
 		}
 
 		taskNumber := bc.workPool.Waiting()
-		Logger.Debug("wait block getter task finish", zap.Int("taskNumber", taskNumber))
+		Log.Debug("wait block getter task finish", zap.Int("taskNumber", taskNumber))
 		wg.Wait()
-		Logger.Debug("all block getter task finish")
+		Log.Debug("all block getter task finish")
 		close(bc.buffer)
 	}()
 }
@@ -145,7 +141,7 @@ func (bc *blockCrawler) Start() {
 func (bc *blockCrawler) GetStartHeight(startBlockNumber uint64) uint64 {
 	newestBlockNumber, err := bc.ethClient.BlockNumber(bc.ctx)
 	if err != nil {
-		Logger.Fatal("ethClient.BigIntHeight() err", zap.Error(err))
+		Log.Fatal("ethClient.BigIntHeight() err", zap.Error(err))
 	}
 
 	if startBlockNumber == 0 {
@@ -184,34 +180,34 @@ func (bc *blockCrawler) subscribeNewHead() (ethereum.Subscription, <-chan error,
 func (bc *blockCrawler) startSubscribeNewHead() {
 	headerHeight, err := bc.ethClient.BlockNumber(bc.ctx)
 	if err != nil {
-		Logger.Fatal("BigIntHeight() err", zap.Error(err))
+		Log.Fatal("BigIntHeight() err", zap.Error(err))
 	}
 	bc.setHeaderHeight(headerHeight)
 
 	sub, subErrChan, subErr := bc.subscribeNewHead()
 	if subErr != nil {
-		Logger.Fatal("subscribeNewHead() err", zap.Error(subErr))
+		Log.Fatal("subscribeNewHead() err", zap.Error(subErr))
 	}
 
 	go func() {
 		for {
 			select {
 			case err = <-subErrChan:
-				Logger.Error("receive block err", zap.Error(err))
+				Log.Error("receive block err", zap.Error(err))
 				sub.Unsubscribe()
 				for {
 					sub, subErrChan, subErr = bc.subscribeNewHead()
 					if subErr != nil {
-						Logger.Error("subscribeNewHead() err", zap.Error(subErr))
+						Log.Error("subscribeNewHead() err", zap.Error(subErr))
 						time.Sleep(time.Second * 1)
 						continue
 					}
-					Logger.Info("subscribeNewHead() success")
+					Log.Info("subscribeNewHead() success")
 					break
 				}
 
 			case blockHeader := <-bc.blockHeaderChan:
-				Logger.Info("receive block header", zap.Any("height", blockHeader.Number))
+				Log.Info("receive block header", zap.Any("headerHeight", blockHeader.Number))
 				headerHeight = blockHeader.Number.Uint64()
 				bc.setHeaderHeight(headerHeight)
 			}
@@ -243,7 +239,7 @@ func (bc *blockCrawler) StartDispatch(startBlockNumber uint64) {
 
 			stopped, nextBlockHeight := bc.dispatchRange(cur, headerHeight)
 			if stopped {
-				Logger.Info("dispatch interrupted", zap.Uint64("nextBlockHeight", nextBlockHeight))
+				Log.Info("dispatch interrupted", zap.Uint64("nextBlockHeight", nextBlockHeight))
 				bc.doStop()
 				return
 			}

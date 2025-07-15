@@ -1,9 +1,10 @@
 package main
 
 import (
+	"math/big"
+
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
-	"math/big"
 )
 
 type BlockReceipt struct {
@@ -36,3 +37,29 @@ type BlockEvent struct {
 func (b *BlockEvent) Sequence() uint64 {
 	return b.Height
 }
+
+type Tick struct {
+	LiquidityNet *big.Int
+}
+
+func (t *Tick) V() []byte {
+	return t.LiquidityNet.Bytes()
+}
+
+func NewTick() *Tick {
+	return &Tick{LiquidityNet: new(big.Int)}
+}
+
+func (t *Tick) AddLiquidity(amount *big.Int) {
+	t.LiquidityNet.Add(t.LiquidityNet, amount)
+}
+
+func (t *Tick) MarshalBinary() ([]byte, error) {
+	return t.LiquidityNet.GobEncode()
+}
+
+func (t *Tick) UnmarshalBinary(data []byte) error {
+	return t.LiquidityNet.GobDecode(data)
+}
+
+var _ EntryV = &Tick{}
