@@ -23,7 +23,7 @@ func main() {
 		panic(err)
 	}
 
-	brs := NewSequencer[*BlockReceipt](0)
-	bes := NewSequencer[*BlockEvent](0)
+	//brs := NewSequencer[*BlockReceipt](0)
+	//bes := NewSequencer[*BlockEvent](0)
 
 }
