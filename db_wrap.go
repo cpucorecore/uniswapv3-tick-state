@@ -63,6 +63,10 @@ var HeightKey = []byte("height")
 func (r *rocksDBWrap) GetHeight() (uint64, error) {
 	data, err := r.db.Get(HeightKey)
 	if err != nil {
+		if IsNotExist(err) {
+			return 0, nil
+		}
+
 		return 0, err
 	}
 

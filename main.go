@@ -32,7 +32,7 @@ func main() {
 	ctx := context.Background()
 
 	rocksDB, err := NewRocksDB("./db", &RocksDBOptions{
-		BlockCacheSize:       1024 * 1024 * 1024 * 4,
+		BlockCacheSize:       1024 * 1024 * 1024 * 1,
 		WriteBufferSize:      1024 * 1024 * 128,
 		MaxWriteBufferNumber: 2,
 	})
@@ -48,6 +48,11 @@ func main() {
 	parser.MountOutput(reactor)
 
 	finishedHeight, err := dbWrap.GetHeight()
+	if err != nil {
+		Log.Fatal("failed to get finished height", zap.Error(err))
+	}
+
+	Log.Info(fmt.Sprintf("finished height: %d", finishedHeight))
 	dispatcher := NewTaskDispatcher(G.EthRPC.WS)
 	fromHeight := dispatcher.GetFromHeight(ctx, G.BlockCrawler.FromHeight, finishedHeight)
 	blockSequencer := NewSequencer[*BlockReceipt](fromHeight)

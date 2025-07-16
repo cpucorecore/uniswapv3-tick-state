@@ -6,6 +6,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"math/big"
+	"uniswapv3-tick-state/abi_instance"
 )
 
 type BlockParser interface {
@@ -75,9 +76,9 @@ var (
 
 func ParseLog(log *types.Log) (*Event, error) {
 	switch log.Topics[0] {
-	case MintTopic0:
+	case abi_instance.MintTopic0:
 		return ParseMint(log)
-	case BurnTopic0:
+	case abi_instance.BurnTopic0:
 		return ParseBurn(log)
 	default:
 		return nil, ErrUnknownLogTopic
@@ -146,22 +147,22 @@ func (p *EventInputParser) Parse(log *types.Log) ([]interface{}, error) {
 
 var (
 	MintEventInputParser = &EventInputParser{
-		Topic0:        MintTopic0,
+		Topic0:        abi_instance.MintTopic0,
 		TopicLen:      4,
 		DataUnpackLen: 4,
-		ABIEvent:      MintEvent,
+		ABIEvent:      abi_instance.MintEvent,
 	}
 
 	BurnEventInputParser = &EventInputParser{
-		Topic0:        BurnTopic0,
+		Topic0:        abi_instance.BurnTopic0,
 		TopicLen:      4,
 		DataUnpackLen: 3,
-		ABIEvent:      BurnEvent,
+		ABIEvent:      abi_instance.BurnEvent,
 	}
 
 	InputParserBook = map[common.Hash]*EventInputParser{
-		MintTopic0: MintEventInputParser,
-		BurnTopic0: BurnEventInputParser,
+		abi_instance.MintTopic0: MintEventInputParser,
+		abi_instance.BurnTopic0: BurnEventInputParser,
 	}
 )
 

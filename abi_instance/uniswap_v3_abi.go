@@ -1,4 +1,4 @@
-package main
+package abi_instance
 
 import (
 	"github.com/ethereum/go-ethereum/accounts/abi"

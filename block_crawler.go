@@ -49,11 +49,11 @@ func NewBlockCrawler(url string, poolSize int, sequencer Sequencer[*BlockReceipt
 	}
 
 	return &blockCrawler{
-		inputQueue:      make(chan uint64, 100),
+		inputQueue:      make(chan uint64, 1),
 		ethClient:       ethClient,
 		pool:            pool,
 		outputSequencer: sequencer,
-		outputBuffer:    make(chan *BlockReceipt, 100),
+		outputBuffer:    make(chan *BlockReceipt, 1),
 	}
 }
 
@@ -94,6 +94,8 @@ func (c *blockCrawler) startCommitOutput() {
 }
 
 func (c *blockCrawler) Start(ctx context.Context) {
+	c.startCommitOutput()
+
 	go func() {
 		wg := &sync.WaitGroup{}
 	tagFor:
@@ -108,12 +110,13 @@ func (c *blockCrawler) Start(ctx context.Context) {
 				wg.Add(1)
 				c.pool.Submit(func() {
 					defer wg.Done()
-					bw, err := c.getBlockRetry(ctx, height)
+					blockReceipt, err := c.getBlockRetry(ctx, height)
 					if err != nil {
 						Log.Error("get block err", zap.Uint64("headerHeight", height), zap.Error(err))
 						return
 					}
-					c.outputSequencer.Commit(bw, c.outputBuffer)
+					Log.Info("get block success", zap.Uint64("headerHeight", height))
+					c.outputSequencer.Commit(blockReceipt, c.outputBuffer)
 				})
 			}
 		}
