@@ -12,16 +12,21 @@ type TickDB interface {
 
 type HeightDB interface {
 	GetHeight() (uint64, error)
-	SaveHeight(height uint64) error
+	SetHeight(height uint64) error
 }
 
 type DBWrap interface {
 	TickDB
 	HeightDB
+	close()
 }
 
 type rocksDBWrap struct {
 	db *RocksDB
+}
+
+func (r *rocksDBWrap) close() {
+	r.db.Close()
 }
 
 func NewDBWrap(db *RocksDB) DBWrap {
@@ -53,7 +58,7 @@ func (r *rocksDBWrap) SaveTick(k []byte, tick *Tick) error {
 	return r.db.Set(k, data)
 }
 
-var HeightKey = []byte("headerHeight")
+var HeightKey = []byte("height")
 
 func (r *rocksDBWrap) GetHeight() (uint64, error) {
 	data, err := r.db.Get(HeightKey)
@@ -62,14 +67,15 @@ func (r *rocksDBWrap) GetHeight() (uint64, error) {
 	}
 
 	if len(data) != 8 {
-		return 0, ErrInvalidHeightData
+		//return 0, ErrInvalidHeightData
+		return 0, nil // not exist
 	}
 
 	height := binary.BigEndian.Uint64(data)
 	return height, nil
 }
 
-func (r *rocksDBWrap) SaveHeight(height uint64) error {
+func (r *rocksDBWrap) SetHeight(height uint64) error {
 	var buf [8]byte
 	binary.BigEndian.PutUint64(buf[:], height)
 	return r.db.Set(HeightKey, buf[:])

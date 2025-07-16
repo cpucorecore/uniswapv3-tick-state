@@ -8,7 +8,34 @@ import (
 	"math/big"
 )
 
-func ParseBlock(block *BlockReceipt) *BlockEvent {
+type BlockParser interface {
+	Output[*BlockReceipt]
+	OutputMountable[*BlockEvent]
+}
+
+type blockParser struct {
+	blockEventReceiver Output[*BlockEvent]
+}
+
+func (p *blockParser) PutInput(blockReceipt *BlockReceipt) {
+	// no buffer now
+	blockEvent := p.ParseBlock(blockReceipt)
+	p.blockEventReceiver.PutInput(blockEvent)
+}
+
+func (p *blockParser) FinInput() {
+	p.blockEventReceiver.FinInput()
+}
+
+func (p *blockParser) MountOutput(blockEventReceiver Output[*BlockEvent]) {
+	p.blockEventReceiver = blockEventReceiver
+}
+
+func NewBlockParser() BlockParser {
+	return &blockParser{}
+}
+
+func (p *blockParser) ParseBlock(block *BlockReceipt) *BlockEvent {
 	events := make([]*Event, 0, 300)
 
 	for _, receipt := range block.Receipts {

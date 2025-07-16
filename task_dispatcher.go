@@ -9,27 +9,23 @@ import (
 	"time"
 )
 
-type TaskCommiter interface {
-	CommitTask(uint64)
-	NoMoreTask()
-}
-
 type TaskDispatcher interface {
-	MountTaskCommiter(TaskCommiter)
+	GetFromHeight(ctx context.Context, fromHeight, finishedHeight uint64) uint64
 	Start(ctx context.Context, fromHeight uint64)
 	Stop()
+	OutputMountable[uint64]
 }
 
 type taskDispatcher struct {
 	ethClient    *ethclient.Client
-	taskCommiter TaskCommiter
+	taskReceiver Output[uint64]
 	headerHeight MutexValue[uint64]
 	ethHeaders   chan *ethtypes.Header
 	stopped      MutexValue[bool]
 }
 
-func (d *taskDispatcher) MountTaskCommiter(taskCommiter TaskCommiter) {
-	d.taskCommiter = taskCommiter
+func (d *taskDispatcher) MountOutput(taskReceiver Output[uint64]) {
+	d.taskReceiver = taskReceiver
 }
 
 func (d *taskDispatcher) Stop() {
@@ -87,7 +83,7 @@ func (d *taskDispatcher) dispatchRange(from, to uint64) (stopped bool, nextBlock
 		if d.stopped.Get() {
 			return true, i
 		}
-		d.taskCommiter.CommitTask(i)
+		d.taskReceiver.PutInput(i)
 	}
 	return false, 0
 }
@@ -107,7 +103,7 @@ func (d *taskDispatcher) Start(ctx context.Context, fromHeight uint64) {
 			stopped, nextBlockHeight := d.dispatchRange(height, headerHeight)
 			if stopped {
 				Log.Info("dispatch interrupted", zap.Uint64("nextBlockHeight", nextBlockHeight))
-				d.taskCommiter.NoMoreTask()
+				d.taskReceiver.FinInput()
 				return
 			}
 
@@ -126,4 +122,21 @@ func NewTaskDispatcher(url string) TaskDispatcher {
 		ethClient:  ethClient,
 		ethHeaders: make(chan *ethtypes.Header, 100),
 	}
+}
+
+func (d *taskDispatcher) GetFromHeight(ctx context.Context, fromHeight, finishedHeight uint64) uint64 {
+	if fromHeight == 0 {
+		fromHeight = finishedHeight
+	}
+
+	if fromHeight != 0 {
+		return fromHeight
+	}
+
+	height, err := d.ethClient.BlockNumber(ctx)
+	if err != nil {
+		Log.Fatal("ethClient BlockNumber err", zap.Error(err))
+	}
+
+	return height
 }

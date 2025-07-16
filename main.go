@@ -4,12 +4,17 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"go.uber.org/zap"
 	"os"
+	"os/signal"
+	"sync"
+	"syscall"
 )
 
 func main() {
 	var showVersion bool
 	flag.BoolVar(&showVersion, "v", false, "show version information")
+
 	var configFile string
 	flag.StringVar(&configFile, "c", "config.json", "config file")
 	flag.Parse()
@@ -25,32 +30,43 @@ func main() {
 	}
 
 	ctx := context.Background()
-	bc := NewBlockCrawler(nil, nil, brs)
-	sh := bc.GetStartHeight(0)
-	brs := NewSequencer[*BlockReceipt](sh)
-	//_ := NewSequencer[*BlockEvent](sh)
-
-	dispatcher := NewTaskDispatcher(G.Bsc.WsEndpoint)
-	worker := NewBlockCrawlerWorker(G.Bsc.WsEndpoint, 10, brs)
-	worker.Start(ctx)
-	dispatcher.MountTaskCommiter(worker)
-	dispatcher.Start(ctx, sh)
 
 	rocksDB, err := NewRocksDB("./db", &RocksDBOptions{
 		BlockCacheSize:       1024 * 1024 * 1024 * 4,
 		WriteBufferSize:      1024 * 1024 * 128,
 		MaxWriteBufferNumber: 2,
 	})
-
-	dbWrap := NewDBWrap(rocksDB)
-	actor := NewEventActor(dbWrap)
-
-	for {
-		br := worker.NextBlockReceipt()
-		be := ParseBlock(br)
-		err = actor.ActBlockEvent(be)
-		if err != nil {
-			Log.Fatal("TODO")
-		}
+	if err != nil {
+		panic(err)
 	}
+	dbWrap := NewDBWrap(rocksDB)
+
+	wg := &sync.WaitGroup{}
+	wg.Add(1)
+	reactor := NewEventReactor(dbWrap, wg)
+	parser := NewBlockParser()
+	parser.MountOutput(reactor)
+
+	finishedHeight, err := dbWrap.GetHeight()
+	dispatcher := NewTaskDispatcher(G.EthRPC.WS)
+	fromHeight := dispatcher.GetFromHeight(ctx, G.BlockCrawler.FromHeight, finishedHeight)
+	blockSequencer := NewSequencer[*BlockReceipt](fromHeight)
+	crawler := NewBlockCrawler(G.EthRPC.WS, 10, blockSequencer)
+	crawler.MountOutput(parser)
+	crawler.Start(ctx)
+
+	dispatcher.MountOutput(crawler)
+	dispatcher.Start(ctx, fromHeight)
+
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		sig := <-sigChan
+		Log.Info("receive signal", zap.String("signal", sig.String()))
+		dispatcher.Stop()
+	}()
+
+	Log.Info("waiting for retirement...")
+	wg.Wait()
+	Log.Info("now retire")
 }

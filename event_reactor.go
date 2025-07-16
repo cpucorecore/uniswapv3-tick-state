@@ -4,11 +4,13 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"go.uber.org/zap"
 	"math/big"
+	"sync"
 )
 
 /*
-EventActor
+EventReactor
 BlockEvent enter this reactor, for every event, it will act as:
 
 	if Event.Type == EventTypeMint {
@@ -19,17 +21,46 @@ BlockEvent enter this reactor, for every event, it will act as:
 		tick[TickUpper] += Amount
 	}
 */
-type EventActor interface {
-	ActBlockEvent(event *BlockEvent) error
+type EventReactor interface {
+	ReactBlockEvent(event *BlockEvent) error
+	Output[*BlockEvent]
 }
 
-type eventActor struct {
+type eventReactor struct {
 	db DBWrap
+	wg *sync.WaitGroup
 }
 
-func NewEventActor(db DBWrap) EventActor {
-	return &eventActor{
+func (ea *eventReactor) ReactBlockEvent(blockEvent *BlockEvent) error {
+	for _, e := range blockEvent.Events {
+		if err := ea.reactEvent(e); err != nil {
+			return err
+		}
+	}
+	return ea.db.SetHeight(blockEvent.Height)
+}
+
+func (ea *eventReactor) PutInput(blockEvent *BlockEvent) {
+	// no buffer now
+	err := ea.ReactBlockEvent(blockEvent)
+	if err != nil {
+		Log.Fatal("reactBlockEvent error", zap.Error(err), zap.Uint64("height", blockEvent.Height))
+	}
+}
+
+func (ea *eventReactor) FinInput() {
+	ea.shutdown()
+}
+
+func (ea *eventReactor) shutdown() {
+	ea.db.close()
+	ea.wg.Done()
+}
+
+func NewEventReactor(db DBWrap, wg *sync.WaitGroup) EventReactor {
+	return &eventReactor{
 		db: db,
+		wg: wg,
 	}
 }
 
@@ -53,17 +84,17 @@ func genKey(event *Event) [2][]byte {
 	}
 }
 
-func (ea *eventActor) actEvent(event *Event) error {
+func (ea *eventReactor) reactEvent(event *Event) error {
 	ks := genKey(event)
 
 	switch event.Type {
 	case EventTypeMint:
-		ea.actTick(ks[0], event.Amount)
-		ea.actTick(ks[1], new(big.Int).Neg(event.Amount))
+		ea.reactTick(ks[0], event.Amount)
+		ea.reactTick(ks[1], new(big.Int).Neg(event.Amount))
 
 	case EventTypeBurn:
-		ea.actTick(ks[0], new(big.Int).Neg(event.Amount))
-		ea.actTick(ks[1], event.Amount)
+		ea.reactTick(ks[0], new(big.Int).Neg(event.Amount))
+		ea.reactTick(ks[1], event.Amount)
 
 	default:
 		panic(fmt.Sprintf("wrong event: %v", event.Type))
@@ -76,7 +107,7 @@ func IsNotExist(err error) bool {
 	return errors.Is(err, ErrKeyNotFound)
 }
 
-func (ea *eventActor) getOrNewTick(k []byte) *Tick {
+func (ea *eventReactor) getOrNewTick(k []byte) *Tick {
 	tick, err := ea.db.GetTick(k)
 	if err != nil {
 		if IsNotExist(err) {
@@ -89,21 +120,12 @@ func (ea *eventActor) getOrNewTick(k []byte) *Tick {
 	return tick
 }
 
-func (ea *eventActor) saveTick(k []byte, tick *Tick) error {
+func (ea *eventReactor) saveTick(k []byte, tick *Tick) error {
 	return ea.db.SaveTick(k, tick)
 }
 
-func (ea *eventActor) actTick(k []byte, amount *big.Int) error {
+func (ea *eventReactor) reactTick(k []byte, amount *big.Int) error {
 	tick := ea.getOrNewTick(k)
 	tick.AddLiquidity(amount)
 	return ea.saveTick(k, tick)
-}
-
-func (ea *eventActor) ActBlockEvent(event *BlockEvent) error {
-	for _, e := range event.Events {
-		if err := ea.actEvent(e); err != nil {
-			return err
-		}
-	}
-	return nil
 }

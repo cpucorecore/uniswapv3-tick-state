@@ -25,8 +25,8 @@ func InitLogger() {
 	}
 
 	buffer := &zapcore.BufferedWriteSyncer{
-		Size:          G.Log.AsyncBufferSizeByByte,
-		FlushInterval: time.Second * time.Duration(G.Log.AsyncFlushIntervalBySecond),
+		Size:          G.Log.BufferSize,
+		FlushInterval: time.Second * time.Duration(G.Log.FlushInterval),
 		WS:            os.Stdout,
 	}
 	writeSyncer := zapcore.AddSync(buffer)
