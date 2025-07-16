@@ -1,0 +1,16 @@
+{
+    "log": {
+        "async": false,
+        "buffer_size": 1000000,
+        "flush_interval": 1
+    },
+    "eth_rpc": {
+        "http": "https://bsc-dataseed.binance.org/",
+        "archive": "https://bsc-dataseed.binance.org/",
+        "ws": "ws://bsc-dataseed.binance.org/"
+    },
+    "block_crawler": {
+        "pool_size": 1,
+        "from_height": 0
+    }
+}
