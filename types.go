@@ -1,10 +1,10 @@
 package main
 
 import (
-	"math/big"
-
+	"encoding/binary"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
+	"math/big"
 )
 
 type BlockReceipt struct {
@@ -29,6 +29,40 @@ type Event struct {
 	Amount    *big.Int
 }
 
+func int32ToOrderedBytes(n int32) []byte {
+	buf := make([]byte, 4)
+	binary.BigEndian.PutUint32(buf, uint32(n)+0x80000000)
+	return buf
+}
+
+const (
+	TickStateKeySize = 26 // 2 bytes prefix("2:") + 20 bytes address + 4 bytes tick
+)
+
+var (
+	TickStateKeyPrefix = []byte("2:")
+)
+
+func GetTickStateKey(address common.Address, tick int32) []byte {
+	key := make([]byte, TickStateKeySize)
+	copy(key[:1], TickStateKeyPrefix)
+	copy(key, address[:])
+	copy(key[20:], int32ToOrderedBytes(tick))
+	return key
+}
+
+/*
+GetTickStateKeys generates a key for the tick based on the event's address and tick values.
+tickLower and tickUpper in Uniswap V3 contract are represented as int24 values.
+tickLower and tickUpper are converted to int32 and appended to the address bytes.
+*/
+func (e *Event) GetTickStateKeys() [2][]byte {
+	return [2][]byte{
+		GetTickStateKey(e.Address, int32(e.TickLower.Int64())),
+		GetTickStateKey(e.Address, int32(e.TickUpper.Int64())),
+	}
+}
+
 type BlockEvent struct {
 	Height uint64
 	Events []*Event
@@ -39,6 +73,7 @@ func (b *BlockEvent) Sequence() uint64 {
 }
 
 type TickState struct {
+	Tick         uint32 // int24 in Uniswap V3, but we use uint32 for simplicity
 	LiquidityNet *big.Int
 }
 
@@ -62,11 +97,18 @@ func (t *TickState) Equal(other *TickState) bool {
 }
 
 func (t *TickState) MarshalBinary() ([]byte, error) {
-	return t.LiquidityNet.GobEncode()
+	lnBytes, err := t.LiquidityNet.GobEncode()
+	if err != nil {
+		return nil, err
+	}
+
+	buf := make([]byte, 4+len(lnBytes))
+	binary.BigEndian.PutUint32(buf[:4], uint32(t.Tick))
+	copy(buf[4:], lnBytes)
+	return buf, nil
 }
 
 func (t *TickState) UnmarshalBinary(data []byte) error {
-	return t.LiquidityNet.GobDecode(data)
+	t.Tick = binary.BigEndian.Uint32(data[:4])
+	return t.LiquidityNet.GobDecode(data[4:])
 }
-
-var _ EntryV = &TickState{}

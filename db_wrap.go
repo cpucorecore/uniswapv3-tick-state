@@ -4,7 +4,7 @@ import (
 	"encoding/binary"
 )
 
-type TickDB interface {
+type TickStateDB interface {
 	SaveTickState(k []byte, tick *TickState) error
 	GetTickState(k []byte) (*TickState, error)
 	GetTickStates(from, to []byte) ([]*TickState, error)
@@ -16,7 +16,7 @@ type HeightDB interface {
 }
 
 type DBWrap interface {
-	TickDB
+	TickStateDB
 	HeightDB
 	close()
 }
@@ -76,7 +76,7 @@ func (r *rocksDBWrap) GetTickStates(from, to []byte) ([]*TickState, error) {
 	return ticks, nil
 }
 
-var HeightKey = []byte("height")
+var HeightKey = []byte("1")
 
 func (r *rocksDBWrap) GetHeight() (uint64, error) {
 	data, err := r.db.Get(HeightKey)

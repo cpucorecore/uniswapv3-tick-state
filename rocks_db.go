@@ -3,9 +3,10 @@ package main
 import (
 	"errors"
 	"fmt"
-	"github.com/linxGnu/grocksdb"
 	"strconv"
 	"time"
+
+	"github.com/linxGnu/grocksdb"
 )
 
 type EntryK interface {
@@ -20,16 +21,16 @@ type KVEntry interface {
 	EntryV
 }
 
-type kvEntry struct {
+type bytesEntry struct {
 	key []byte
 	val []byte
 }
 
-func (e *kvEntry) K() []byte { return e.key }
-func (e *kvEntry) V() []byte { return e.val }
+func (e *bytesEntry) K() []byte { return e.key }
+func (e *bytesEntry) V() []byte { return e.val }
 
 type RocksDBOptions struct {
-	enableLog            bool
+	EnableLog            bool
 	BlockCacheSize       uint64
 	WriteBufferSize      uint64
 	MaxWriteBufferNumber int
@@ -55,7 +56,7 @@ func logRocksDBStats(db *grocksdb.DB) {
 	fmt.Printf("BlockCache Hit: %d, Miss: %d, HitRate: %.2f%%\n", blockCacheHit, blockCacheMiss, hitRate)
 }
 
-func NewRocksDB(path string, optsConf *RocksDBOptions) (*RocksDB, error) {
+func NewRocksDB(name string, optsConf *RocksDBOptions) (*RocksDB, error) {
 	opts := grocksdb.NewDefaultOptions()
 	opts.SetCreateIfMissing(true)
 
@@ -73,12 +74,12 @@ func NewRocksDB(path string, optsConf *RocksDBOptions) (*RocksDB, error) {
 		opts.SetMaxWriteBufferNumber(optsConf.MaxWriteBufferNumber)
 	}
 
-	db, err := grocksdb.OpenDb(opts, path)
+	db, err := grocksdb.OpenDb(opts, name)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open RocksDB: %v", err)
 	}
 
-	if optsConf.enableLog {
+	if optsConf.EnableLog {
 		go func() {
 			for {
 				logRocksDBStats(db)
@@ -124,23 +125,26 @@ func (r *RocksDB) Del(key []byte) error {
 	return r.db.Delete(r.wo, key)
 }
 
-func (r *RocksDB) GetRange(start, end []byte) ([]KVEntry, error) {
+func (r *RocksDB) GetRange(from, to []byte) ([]KVEntry, error) {
 	it := r.db.NewIterator(r.ro)
 	defer it.Close()
+
 	var result []KVEntry
-	for it.Seek(start); it.Valid(); it.Next() {
+	for it.Seek(from); it.Valid(); it.Next() {
 		key := it.Key()
 		keyData := append([]byte{}, key.Data()...)
-		if string(keyData) >= string(end) {
+		if string(keyData) > string(to) {
 			key.Free()
 			break
 		}
+
 		value := it.Value()
 		valData := append([]byte{}, value.Data()...)
-		result = append(result, &kvEntry{key: keyData, val: valData})
+		result = append(result, &bytesEntry{key: keyData, val: valData})
 		key.Free()
 		value.Free()
 	}
+
 	if err := it.Err(); err != nil {
 		return nil, err
 	}

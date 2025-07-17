@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/binary"
 	"errors"
 	"fmt"
 	"go.uber.org/zap"
@@ -64,33 +63,8 @@ func NewEventReactor(db DBWrap, wg *sync.WaitGroup) EventReactor {
 	}
 }
 
-func int32ToBigEndianBytes(n int32) []byte {
-	buf := make([]byte, 4)
-	binary.BigEndian.PutUint32(buf, uint32(n))
-	return buf
-}
-
-func genKey(base []byte, value int32) []byte {
-	buf := make([]byte, len(base)+4)
-	copy(buf, base)
-	binary.BigEndian.PutUint32(buf[len(base):], uint32(value))
-	return buf
-}
-
-/*
-genKeys generates a key for the tick based on the event's address and tick values.
-tickLower and tickUpper in Uniswap V3 contract are represented as int24 values.
-tickLower and tickUpper are converted to int32 and appended to the address bytes.
-*/
-func genKeys(event *Event) [2][]byte {
-	return [2][]byte{
-		genKey(event.Address.Bytes(), int32(event.TickLower.Int64())),
-		genKey(event.Address.Bytes(), int32(event.TickUpper.Int64())),
-	}
-}
-
 func (ea *eventReactor) reactEvent(event *Event) error {
-	ks := genKeys(event)
+	ks := event.GetTickStateKeys()
 
 	switch event.Type {
 	case EventTypeMint:

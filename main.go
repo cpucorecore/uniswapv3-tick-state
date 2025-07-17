@@ -32,6 +32,7 @@ func main() {
 	ctx := context.Background()
 
 	rocksDB, err := NewRocksDB("./db", &RocksDBOptions{
+		EnableLog:            true,
 		BlockCacheSize:       1024 * 1024 * 1024 * 1,
 		WriteBufferSize:      1024 * 1024 * 128,
 		MaxWriteBufferNumber: 2,
@@ -40,6 +41,9 @@ func main() {
 		panic(err)
 	}
 	dbWrap := NewDBWrap(rocksDB)
+
+	as := NewAPIServer(dbWrap)
+	as.Start()
 
 	wg := &sync.WaitGroup{}
 	wg.Add(1)

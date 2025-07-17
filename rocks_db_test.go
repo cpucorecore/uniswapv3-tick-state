@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/stretchr/testify/require"
 	"math/big"
 	"path/filepath"
@@ -85,18 +86,23 @@ func TestGetTicks(t *testing.T) {
 
 	dbw := NewDBWrap(db)
 
-	k1 := genKey([]byte("mock"), 1)
-	k2 := genKey([]byte("mock"), 2)
-	k3 := genKey([]byte("mock"), 3)
-	k4 := genKey([]byte("mock"), 4)
+	addr := common.HexToAddress("0xffff")
+	kn1 := GetTickStateKey(addr, -1)
+	kn2 := GetTickStateKey(addr, -2)
+	k1 := GetTickStateKey(addr, 1)
+	k2 := GetTickStateKey(addr, 2)
+	k3 := GetTickStateKey(addr, 3)
+
 	tickTests := []struct {
 		tickKey         []byte
 		tickState       *TickState
 		expectTickState *TickState
 	}{
-		{tickKey: k1, tickState: &TickState{LiquidityNet: big.NewInt(1)}, expectTickState: &TickState{LiquidityNet: big.NewInt(1)}},
-		{tickKey: k3, tickState: &TickState{LiquidityNet: big.NewInt(3)}, expectTickState: &TickState{LiquidityNet: big.NewInt(2)}},
-		{tickKey: k2, tickState: &TickState{LiquidityNet: big.NewInt(2)}, expectTickState: &TickState{LiquidityNet: big.NewInt(3)}},
+		{tickKey: k1, tickState: &TickState{LiquidityNet: big.NewInt(1)}, expectTickState: &TickState{LiquidityNet: big.NewInt(-2)}},
+		{tickKey: k3, tickState: &TickState{LiquidityNet: big.NewInt(3)}, expectTickState: &TickState{LiquidityNet: big.NewInt(-1)}},
+		{tickKey: k2, tickState: &TickState{LiquidityNet: big.NewInt(2)}, expectTickState: &TickState{LiquidityNet: big.NewInt(1)}},
+		{tickKey: kn2, tickState: &TickState{LiquidityNet: big.NewInt(-2)}, expectTickState: &TickState{LiquidityNet: big.NewInt(2)}},
+		{tickKey: kn1, tickState: &TickState{LiquidityNet: big.NewInt(-1)}, expectTickState: &TickState{LiquidityNet: big.NewInt(3)}},
 	}
 
 	for _, tickTest := range tickTests {
@@ -104,9 +110,9 @@ func TestGetTicks(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	ticks, err := dbw.GetTickStates(k1, k4)
+	ticks, err := dbw.GetTickStates(kn2, k3)
 	require.NoError(t, err)
-	require.Len(t, ticks, 3, "should retrieve 3 ticks")
+	require.Len(t, ticks, 5, "should retrieve 5 ticks")
 	for i, tick := range ticks {
 		require.True(t, tick.Equal(tickTests[i].expectTickState), "tick state should match")
 	}
