@@ -50,7 +50,7 @@ func (r *rocksDBWrap) GetTickState(k []byte) (*TickState, error) {
 		return nil, err
 	}
 
-	tick := NewTick()
+	tick := NewTickState(0)
 	if err := tick.UnmarshalBinary(data); err != nil {
 		return nil, err
 	}
@@ -66,7 +66,7 @@ func (r *rocksDBWrap) GetTickStates(from, to []byte) ([]*TickState, error) {
 
 	var ticks []*TickState
 	for _, entry := range entries {
-		tick := NewTick()
+		tick := NewTickState(0)
 		if err := tick.UnmarshalBinary(entry.V()); err != nil {
 			return nil, err
 		}

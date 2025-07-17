@@ -45,9 +45,9 @@ var (
 
 func GetTickStateKey(address common.Address, tick int32) []byte {
 	key := make([]byte, TickStateKeySize)
-	copy(key[:1], TickStateKeyPrefix)
-	copy(key, address[:])
-	copy(key[20:], int32ToOrderedBytes(tick))
+	copy(key[:2], TickStateKeyPrefix)
+	copy(key[2:22], address[:])
+	copy(key[22:], int32ToOrderedBytes(tick))
 	return key
 }
 
@@ -81,8 +81,11 @@ func (t *TickState) V() []byte {
 	return t.LiquidityNet.Bytes()
 }
 
-func NewTick() *TickState {
-	return &TickState{LiquidityNet: new(big.Int)}
+func NewTickState(tick uint32) *TickState {
+	return &TickState{
+		Tick:         tick,
+		LiquidityNet: new(big.Int),
+	}
 }
 
 func (t *TickState) AddLiquidity(amount *big.Int) {

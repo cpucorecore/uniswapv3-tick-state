@@ -31,7 +31,7 @@ func main() {
 
 	ctx := context.Background()
 
-	rocksDB, err := NewRocksDB("./db", &RocksDBOptions{
+	rocksDB, err := NewRocksDB(".db", &RocksDBOptions{
 		EnableLog:            true,
 		BlockCacheSize:       1024 * 1024 * 1024 * 1,
 		WriteBufferSize:      1024 * 1024 * 128,

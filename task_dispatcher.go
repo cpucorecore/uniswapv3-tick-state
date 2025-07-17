@@ -93,6 +93,7 @@ func (d *taskDispatcher) Start(ctx context.Context, fromHeight uint64) {
 
 	go func() {
 		height := fromHeight
+
 		for {
 			headerHeight := d.headerHeight.Get()
 			if headerHeight < height {

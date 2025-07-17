@@ -68,12 +68,12 @@ func (ea *eventReactor) reactEvent(event *Event) error {
 
 	switch event.Type {
 	case EventTypeMint:
-		ea.reactTick(ks[0], event.Amount)
-		ea.reactTick(ks[1], new(big.Int).Neg(event.Amount))
+		ea.reactTick(ks[0], uint32(event.TickLower.Uint64()), event.Amount)
+		ea.reactTick(ks[1], uint32(event.TickUpper.Uint64()), new(big.Int).Neg(event.Amount))
 
 	case EventTypeBurn:
-		ea.reactTick(ks[0], new(big.Int).Neg(event.Amount))
-		ea.reactTick(ks[1], event.Amount)
+		ea.reactTick(ks[0], uint32(event.TickLower.Uint64()), new(big.Int).Neg(event.Amount))
+		ea.reactTick(ks[1], uint32(event.TickUpper.Uint64()), event.Amount)
 
 	default:
 		panic(fmt.Sprintf("wrong event: %v", event.Type))
@@ -86,25 +86,25 @@ func IsNotExist(err error) bool {
 	return errors.Is(err, ErrKeyNotFound)
 }
 
-func (ea *eventReactor) getOrNewTickState(k []byte) *TickState {
-	tick, err := ea.db.GetTickState(k)
+func (ea *eventReactor) getOrNewTickState(k []byte, tick uint32) *TickState {
+	tickState, err := ea.db.GetTickState(k)
 	if err != nil {
 		if IsNotExist(err) {
-			return NewTick()
+			return NewTickState(tick)
 		} else {
 			panic(fmt.Sprintf("GetTickState err: k=%s, err=%v", k, err)) // TODO
 		}
 	}
 
-	return tick
+	return tickState
 }
 
 func (ea *eventReactor) saveTickState(k []byte, tick *TickState) error {
 	return ea.db.SaveTickState(k, tick)
 }
 
-func (ea *eventReactor) reactTick(k []byte, amount *big.Int) error {
-	tickState := ea.getOrNewTickState(k)
+func (ea *eventReactor) reactTick(k []byte, tick uint32, amount *big.Int) error {
+	tickState := ea.getOrNewTickState(k, tick)
 	tickState.AddLiquidity(amount)
 	return ea.saveTickState(k, tickState)
 }

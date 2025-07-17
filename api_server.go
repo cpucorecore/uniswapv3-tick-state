@@ -3,10 +3,11 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/ethereum/go-ethereum/common"
 	"log"
 	"net/http"
 	"strconv"
+
+	"github.com/ethereum/go-ethereum/common"
 )
 
 type APIServer interface {
@@ -109,12 +110,16 @@ func (a *apiServer) GetTickStates(address common.Address, tickLower, tickUpper i
 	return tickStates, nil
 }
 
+var (
+	minTick = int32(-8388608) // int24
+	maxTick = int32(8388607)  // int24
+	minAddr = common.Address{}
+	maxAddr = common.HexToAddress("0xffffffffffffffffffffffffffffffffffffffff") // 20 bytes of 0xff
+)
+
 func (a *apiServer) GetAll() ([]*TickState, error) {
-	minTick := int32(-8388608) // int24
-	maxTick := int32(8388607)  // int24
-	address := common.Address{}
-	keyLower := GetTickStateKey(address, minTick)
-	keyUpper := GetTickStateKey(address, maxTick)
+	keyLower := GetTickStateKey(minAddr, minTick)
+	keyUpper := GetTickStateKey(maxAddr, maxTick)
 	return a.db.GetTickStates(keyLower, keyUpper)
 }
 
