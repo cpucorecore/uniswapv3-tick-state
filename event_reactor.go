@@ -70,22 +70,27 @@ func int32ToBigEndianBytes(n int32) []byte {
 	return buf
 }
 
+func genKey(base []byte, value int32) []byte {
+	buf := make([]byte, len(base)+4)
+	copy(buf, base)
+	binary.BigEndian.PutUint32(buf[len(base):], uint32(value))
+	return buf
+}
+
 /*
-genKey generates a key for the tick based on the event's address and tick values.
+genKeys generates a key for the tick based on the event's address and tick values.
 tickLower and tickUpper in Uniswap V3 contract are represented as int24 values.
 tickLower and tickUpper are converted to int32 and appended to the address bytes.
 */
-func genKey(event *Event) [2][]byte {
-	tickLower := int32(event.TickLower.Int64())
-	tickUpper := int32(event.TickUpper.Int64())
+func genKeys(event *Event) [2][]byte {
 	return [2][]byte{
-		append(event.Address.Bytes(), int32ToBigEndianBytes(tickLower)...),
-		append(event.Address.Bytes(), int32ToBigEndianBytes(tickUpper)...),
+		genKey(event.Address.Bytes(), int32(event.TickLower.Int64())),
+		genKey(event.Address.Bytes(), int32(event.TickUpper.Int64())),
 	}
 }
 
 func (ea *eventReactor) reactEvent(event *Event) error {
-	ks := genKey(event)
+	ks := genKeys(event)
 
 	switch event.Type {
 	case EventTypeMint:
@@ -107,25 +112,25 @@ func IsNotExist(err error) bool {
 	return errors.Is(err, ErrKeyNotFound)
 }
 
-func (ea *eventReactor) getOrNewTick(k []byte) *Tick {
-	tick, err := ea.db.GetTick(k)
+func (ea *eventReactor) getOrNewTickState(k []byte) *TickState {
+	tick, err := ea.db.GetTickState(k)
 	if err != nil {
 		if IsNotExist(err) {
 			return NewTick()
 		} else {
-			panic(fmt.Sprintf("GetTick err: k=%s, err=%v", k, err)) // TODO
+			panic(fmt.Sprintf("GetTickState err: k=%s, err=%v", k, err)) // TODO
 		}
 	}
 
 	return tick
 }
 
-func (ea *eventReactor) saveTick(k []byte, tick *Tick) error {
-	return ea.db.SaveTick(k, tick)
+func (ea *eventReactor) saveTickState(k []byte, tick *TickState) error {
+	return ea.db.SaveTickState(k, tick)
 }
 
 func (ea *eventReactor) reactTick(k []byte, amount *big.Int) error {
-	tick := ea.getOrNewTick(k)
-	tick.AddLiquidity(amount)
-	return ea.saveTick(k, tick)
+	tickState := ea.getOrNewTickState(k)
+	tickState.AddLiquidity(amount)
+	return ea.saveTickState(k, tickState)
 }

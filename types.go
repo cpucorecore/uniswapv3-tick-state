@@ -38,28 +38,35 @@ func (b *BlockEvent) Sequence() uint64 {
 	return b.Height
 }
 
-type Tick struct {
+type TickState struct {
 	LiquidityNet *big.Int
 }
 
-func (t *Tick) V() []byte {
+func (t *TickState) V() []byte {
 	return t.LiquidityNet.Bytes()
 }
 
-func NewTick() *Tick {
-	return &Tick{LiquidityNet: new(big.Int)}
+func NewTick() *TickState {
+	return &TickState{LiquidityNet: new(big.Int)}
 }
 
-func (t *Tick) AddLiquidity(amount *big.Int) {
+func (t *TickState) AddLiquidity(amount *big.Int) {
 	t.LiquidityNet.Add(t.LiquidityNet, amount)
 }
 
-func (t *Tick) MarshalBinary() ([]byte, error) {
+func (t *TickState) Equal(other *TickState) bool {
+	if other == nil {
+		return false
+	}
+	return t.LiquidityNet.Cmp(other.LiquidityNet) == 0
+}
+
+func (t *TickState) MarshalBinary() ([]byte, error) {
 	return t.LiquidityNet.GobEncode()
 }
 
-func (t *Tick) UnmarshalBinary(data []byte) error {
+func (t *TickState) UnmarshalBinary(data []byte) error {
 	return t.LiquidityNet.GobDecode(data)
 }
 
-var _ EntryV = &Tick{}
+var _ EntryV = &TickState{}

@@ -2,12 +2,12 @@ package main
 
 import (
 	"encoding/binary"
-	"errors"
 )
 
 type TickDB interface {
-	GetTick(k []byte) (*Tick, error)
-	SaveTick(k []byte, tick *Tick) error
+	SaveTickState(k []byte, tick *TickState) error
+	GetTickState(k []byte) (*TickState, error)
+	GetTickStates(from, to []byte) ([]*TickState, error)
 }
 
 type HeightDB interface {
@@ -35,7 +35,16 @@ func NewDBWrap(db *RocksDB) DBWrap {
 	}
 }
 
-func (r *rocksDBWrap) GetTick(k []byte) (*Tick, error) {
+func (r *rocksDBWrap) SaveTickState(k []byte, tick *TickState) error {
+	data, err := tick.MarshalBinary()
+	if err != nil {
+		return err
+	}
+
+	return r.db.Set(k, data)
+}
+
+func (r *rocksDBWrap) GetTickState(k []byte) (*TickState, error) {
 	data, err := r.db.Get(k)
 	if err != nil {
 		return nil, err
@@ -49,13 +58,22 @@ func (r *rocksDBWrap) GetTick(k []byte) (*Tick, error) {
 	return tick, nil
 }
 
-func (r *rocksDBWrap) SaveTick(k []byte, tick *Tick) error {
-	data, err := tick.MarshalBinary()
+func (r *rocksDBWrap) GetTickStates(from, to []byte) ([]*TickState, error) {
+	entries, err := r.db.GetRange(from, to)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	return r.db.Set(k, data)
+	var ticks []*TickState
+	for _, entry := range entries {
+		tick := NewTick()
+		if err := tick.UnmarshalBinary(entry.V()); err != nil {
+			return nil, err
+		}
+		ticks = append(ticks, tick)
+	}
+
+	return ticks, nil
 }
 
 var HeightKey = []byte("height")
@@ -84,5 +102,3 @@ func (r *rocksDBWrap) SetHeight(height uint64) error {
 	binary.BigEndian.PutUint64(buf[:], height)
 	return r.db.Set(HeightKey, buf[:])
 }
-
-var ErrInvalidHeightData = errors.New("invalid headerHeight data")

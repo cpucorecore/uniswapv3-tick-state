@@ -15,7 +15,7 @@ type EntryK interface {
 type EntryV interface {
 	V() []byte
 }
-type Entry interface {
+type KVEntry interface {
 	EntryK
 	EntryV
 }
@@ -29,6 +29,7 @@ func (e *kvEntry) K() []byte { return e.key }
 func (e *kvEntry) V() []byte { return e.val }
 
 type RocksDBOptions struct {
+	enableLog            bool
 	BlockCacheSize       uint64
 	WriteBufferSize      uint64
 	MaxWriteBufferNumber int
@@ -40,29 +41,7 @@ type RocksDB struct {
 	wo *grocksdb.WriteOptions
 }
 
-func NewRocksDB(path string, optsConf *RocksDBOptions) (*RocksDB, error) {
-	opts := grocksdb.NewDefaultOptions()
-	opts.SetCreateIfMissing(true)
-
-	if optsConf != nil && optsConf.BlockCacheSize > 0 {
-		options := grocksdb.NewDefaultBlockBasedTableOptions()
-		cache := grocksdb.NewLRUCache(optsConf.BlockCacheSize)
-		options.SetBlockCache(cache)
-		opts.SetBlockBasedTableFactory(options)
-	}
-
-	if optsConf != nil && optsConf.WriteBufferSize > 0 {
-		opts.SetWriteBufferSize(optsConf.WriteBufferSize)
-	}
-	if optsConf != nil && optsConf.MaxWriteBufferNumber > 0 {
-		opts.SetMaxWriteBufferNumber(optsConf.MaxWriteBufferNumber)
-	}
-
-	db, err := grocksdb.OpenDb(opts, path)
-	if err != nil {
-		return nil, fmt.Errorf("failed to open RocksDB: %v", err)
-	}
-
+func logRocksDBStats(db *grocksdb.DB) {
 	stats := db.GetProperty("rocksdb.stats")
 	fmt.Println(stats)
 
@@ -74,22 +53,39 @@ func NewRocksDB(path string, optsConf *RocksDBOptions) (*RocksDB, error) {
 
 	hitRate := float64(blockCacheHit) * 100 / float64(blockCacheHit+blockCacheMiss)
 	fmt.Printf("BlockCache Hit: %d, Miss: %d, HitRate: %.2f%%\n", blockCacheHit, blockCacheMiss, hitRate)
+}
 
-	go func() {
-		for {
-			time.Sleep(time.Minute)
-			stats := db.GetProperty("rocksdb.stats")
-			blockCacheHitStr := db.GetProperty("rocksdb.block.cache.hit")
-			blockCacheMissStr := db.GetProperty("rocksdb.block.cache.miss")
+func NewRocksDB(path string, optsConf *RocksDBOptions) (*RocksDB, error) {
+	opts := grocksdb.NewDefaultOptions()
+	opts.SetCreateIfMissing(true)
 
-			blockCacheHit, _ := strconv.ParseUint(blockCacheHitStr, 10, 64)
-			blockCacheMiss, _ := strconv.ParseUint(blockCacheMissStr, 10, 64)
+	if optsConf.BlockCacheSize > 0 {
+		options := grocksdb.NewDefaultBlockBasedTableOptions()
+		cache := grocksdb.NewLRUCache(optsConf.BlockCacheSize)
+		options.SetBlockCache(cache)
+		opts.SetBlockBasedTableFactory(options)
+	}
 
-			hitRate := float64(blockCacheHit) * 100 / float64(blockCacheHit+blockCacheMiss)
-			fmt.Printf("[RocksDB] BlockCache Hit: %d, Miss: %d, HitRate: %.2f%%\n", blockCacheHit, blockCacheMiss, hitRate)
-			fmt.Println(stats)
-		}
-	}()
+	if optsConf.WriteBufferSize > 0 {
+		opts.SetWriteBufferSize(optsConf.WriteBufferSize)
+	}
+	if optsConf.MaxWriteBufferNumber > 0 {
+		opts.SetMaxWriteBufferNumber(optsConf.MaxWriteBufferNumber)
+	}
+
+	db, err := grocksdb.OpenDb(opts, path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open RocksDB: %v", err)
+	}
+
+	if optsConf.enableLog {
+		go func() {
+			for {
+				logRocksDBStats(db)
+				time.Sleep(time.Minute)
+			}
+		}()
+	}
 
 	return &RocksDB{
 		db: db,
@@ -117,7 +113,7 @@ func (r *RocksDB) Get(key []byte) ([]byte, error) {
 		return nil, ErrKeyNotFound
 	}
 
-	return slice.Data(), nil
+	return append([]byte{}, slice.Data()...), nil
 }
 
 func (r *RocksDB) Set(key, value []byte) error {
@@ -128,10 +124,10 @@ func (r *RocksDB) Del(key []byte) error {
 	return r.db.Delete(r.wo, key)
 }
 
-func (r *RocksDB) GetRange(start, end []byte) ([]Entry, error) {
+func (r *RocksDB) GetRange(start, end []byte) ([]KVEntry, error) {
 	it := r.db.NewIterator(r.ro)
 	defer it.Close()
-	var result []Entry
+	var result []KVEntry
 	for it.Seek(start); it.Valid(); it.Next() {
 		key := it.Key()
 		keyData := append([]byte{}, key.Data()...)
@@ -151,20 +147,11 @@ func (r *RocksDB) GetRange(start, end []byte) ([]Entry, error) {
 	return result, nil
 }
 
-func (r *RocksDB) SetAll(data map[string][]byte) error {
+func (r *RocksDB) SetBatch(kvEntries []KVEntry) error {
 	batch := grocksdb.NewWriteBatch()
 	defer batch.Destroy()
-	for k, v := range data {
-		batch.Put([]byte(k), v)
-	}
-	return r.db.Write(r.wo, batch)
-}
-
-func (r *RocksDB) SetAll2(data []Entry) error {
-	batch := grocksdb.NewWriteBatch()
-	defer batch.Destroy()
-	for _, e := range data {
-		batch.Put(e.K(), e.V())
+	for _, entry := range kvEntries {
+		batch.Put(entry.K(), entry.V())
 	}
 	return r.db.Write(r.wo, batch)
 }
