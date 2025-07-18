@@ -126,12 +126,12 @@ func NewTaskDispatcher(url string) TaskDispatcher {
 }
 
 func (d *taskDispatcher) GetFromHeight(ctx context.Context, fromHeight, finishedHeight uint64) uint64 {
-	if fromHeight == 0 {
-		fromHeight = finishedHeight
-	}
-
 	if fromHeight != 0 {
 		return fromHeight
+	}
+
+	if finishedHeight != 0 {
+		return finishedHeight + 1
 	}
 
 	height, err := d.ethClient.BlockNumber(ctx)

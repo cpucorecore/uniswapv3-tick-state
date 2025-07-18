@@ -59,8 +59,8 @@ func main() {
 	Log.Info(fmt.Sprintf("finished height: %d", finishedHeight))
 	dispatcher := NewTaskDispatcher(G.EthRPC.WS)
 	fromHeight := dispatcher.GetFromHeight(ctx, G.BlockCrawler.FromHeight, finishedHeight)
-	blockSequencer := NewSequencer[*BlockReceipt](fromHeight)
-	crawler := NewBlockCrawler(G.EthRPC.WS, 10, blockSequencer)
+	blockSequencer := NewSequencer[*BlockReceipt](fromHeight - 1)
+	crawler := NewBlockCrawler(G.EthRPC.WS, 1, blockSequencer)
 	crawler.MountOutput(parser)
 	crawler.Start(ctx)
 

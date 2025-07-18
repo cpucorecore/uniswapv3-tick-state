@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/binary"
 	"github.com/ethereum/go-ethereum/common"
+	"math/big"
 )
 
 type TickStateRepo interface {
@@ -47,12 +48,14 @@ func (r *repo) SetTickState(addr common.Address, tick int32, tickState *TickStat
 }
 
 var (
-	EmptyTickState = &TickState{}
+	EmptyTickState = &TickState{
+		LiquidityNet: big.NewInt(0),
+	}
 )
 
 func (r *repo) GetTickState(addr common.Address, tick int32) (*TickState, error) {
 	key := GetTickStateKey(addr, tick).GetKey()
-	data, err := r.db.Get(key)
+	bytes, err := r.db.Get(key)
 	if err != nil {
 		if IsNotExist(err) {
 			return EmptyTickState, nil
@@ -61,7 +64,7 @@ func (r *repo) GetTickState(addr common.Address, tick int32) (*TickState, error)
 	}
 
 	tickState := NewTickState(tick)
-	if err := tickState.UnmarshalBinary(data); err != nil {
+	if err := tickState.UnmarshalBinary(bytes); err != nil {
 		return nil, err
 	}
 
