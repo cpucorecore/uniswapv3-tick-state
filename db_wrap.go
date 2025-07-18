@@ -2,83 +2,140 @@ package main
 
 import (
 	"encoding/binary"
+	"github.com/ethereum/go-ethereum/common"
 )
 
-type TickStateDB interface {
-	SaveTickState(k []byte, tick *TickState) error
-	GetTickState(k []byte) (*TickState, error)
-	GetTickStates(from, to []byte) ([]*TickState, error)
+type TickStateRepo interface {
+	SetTickState(address common.Address, tick int32, tickState *TickState) error
+	GetTickState(address common.Address, tick int32) (*TickState, error)
+	GetTickStates(address common.Address, tickLower, tickUpper int32) ([]*TickState, error)
+	GetAll() (map[common.Address][]*TickState, error) // for dev
 }
 
-type HeightDB interface {
-	GetHeight() (uint64, error)
+type HeightRepo interface {
 	SetHeight(height uint64) error
+	GetHeight() (uint64, error)
 }
 
-type DBWrap interface {
-	TickStateDB
-	HeightDB
-	close()
+type Repo interface {
+	TickStateRepo
+	HeightRepo
+	Close()
 }
 
-type rocksDBWrap struct {
+type repo struct {
 	db *RocksDB
 }
 
-func (r *rocksDBWrap) close() {
+func (r *repo) Close() {
 	r.db.Close()
 }
 
-func NewDBWrap(db *RocksDB) DBWrap {
-	return &rocksDBWrap{
+func NewRepo(db *RocksDB) Repo {
+	return &repo{
 		db: db,
 	}
 }
 
-func (r *rocksDBWrap) SaveTickState(k []byte, tick *TickState) error {
-	data, err := tick.MarshalBinary()
+func (r *repo) SetTickState(addr common.Address, tick int32, tickState *TickState) error {
+	key := GetTickStateKey(addr, tick).GetKey()
+	value, err := tickState.MarshalBinary()
 	if err != nil {
 		return err
 	}
-
-	return r.db.Set(k, data)
+	return r.db.Set(key, value)
 }
 
-func (r *rocksDBWrap) GetTickState(k []byte) (*TickState, error) {
-	data, err := r.db.Get(k)
+var (
+	EmptyTickState = &TickState{}
+)
+
+func (r *repo) GetTickState(addr common.Address, tick int32) (*TickState, error) {
+	key := GetTickStateKey(addr, tick).GetKey()
+	data, err := r.db.Get(key)
 	if err != nil {
+		if IsNotExist(err) {
+			return EmptyTickState, nil
+		}
 		return nil, err
 	}
 
-	tick := NewTickState(0)
-	if err := tick.UnmarshalBinary(data); err != nil {
+	tickState := NewTickState(tick)
+	if err := tickState.UnmarshalBinary(data); err != nil {
 		return nil, err
 	}
 
-	return tick, nil
+	return tickState, nil
 }
 
-func (r *rocksDBWrap) GetTickStates(from, to []byte) ([]*TickState, error) {
+type TickStateCollector struct {
+	collection map[common.Address][]*TickState
+}
+
+func NewTickStateCollector() *TickStateCollector {
+	return &TickStateCollector{
+		collection: make(map[common.Address][]*TickState),
+	}
+}
+
+func (c *TickStateCollector) Add(addr common.Address, tickState *TickState) {
+	if _, exists := c.collection[addr]; !exists {
+		c.collection[addr] = make([]*TickState, 0)
+	}
+	c.collection[addr] = append(c.collection[addr], tickState)
+}
+
+func (c *TickStateCollector) Get() map[common.Address][]*TickState {
+	return c.collection
+}
+
+func (r *repo) GetFromTo(from, to []byte) (map[common.Address][]*TickState, error) {
 	entries, err := r.db.GetRange(from, to)
 	if err != nil {
 		return nil, err
 	}
 
-	var ticks []*TickState
+	collector := NewTickStateCollector()
 	for _, entry := range entries {
-		tick := NewTickState(0)
-		if err := tick.UnmarshalBinary(entry.V()); err != nil {
+		key := BytesToTickStateKey(entry.K())
+		tickState := NewTickState(key.GetTick())
+		if err := tickState.UnmarshalBinary(entry.V()); err != nil {
 			return nil, err
 		}
-		ticks = append(ticks, tick)
+		collector.Add(key.GetAddress(), tickState)
 	}
 
-	return ticks, nil
+	return collector.Get(), nil
+}
+
+var (
+	EmptyTickStates = make([]*TickState, 0)
+)
+
+func (r *repo) GetTickStates(addr common.Address, tickLower, tickUpper int32) ([]*TickState, error) {
+	tickStatesByAddr, err := r.GetFromTo(GetTickStateKey(addr, tickLower).GetKey(), GetTickStateKey(addr, tickUpper).GetKey())
+	if err != nil {
+		return nil, err
+	}
+	if states, exists := tickStatesByAddr[addr]; exists {
+		return states, nil
+	}
+	return EmptyTickStates, nil
+}
+
+func (r *repo) GetAll() (map[common.Address][]*TickState, error) {
+	return r.GetFromTo(MinKey.GetKey(), MaxKey.GetKey())
 }
 
 var HeightKey = []byte("1")
 
-func (r *rocksDBWrap) GetHeight() (uint64, error) {
+func (r *repo) SetHeight(height uint64) error {
+	var buf [8]byte
+	binary.BigEndian.PutUint64(buf[:], height)
+	return r.db.Set(HeightKey, buf[:])
+}
+
+func (r *repo) GetHeight() (uint64, error) {
 	data, err := r.db.Get(HeightKey)
 	if err != nil {
 		if IsNotExist(err) {
@@ -89,16 +146,9 @@ func (r *rocksDBWrap) GetHeight() (uint64, error) {
 	}
 
 	if len(data) != 8 {
-		//return 0, ErrInvalidHeightData
-		return 0, nil // not exist
+		return 0, nil
 	}
 
 	height := binary.BigEndian.Uint64(data)
 	return height, nil
-}
-
-func (r *rocksDBWrap) SetHeight(height uint64) error {
-	var buf [8]byte
-	binary.BigEndian.PutUint64(buf[:], height)
-	return r.db.Set(HeightKey, buf[:])
 }

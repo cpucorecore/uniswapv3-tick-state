@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"github.com/ethereum/go-ethereum/common"
 	"go.uber.org/zap"
 	"math/big"
 	"sync"
@@ -26,7 +27,7 @@ type EventReactor interface {
 }
 
 type eventReactor struct {
-	db DBWrap
+	db Repo
 	wg *sync.WaitGroup
 }
 
@@ -52,11 +53,11 @@ func (ea *eventReactor) FinInput() {
 }
 
 func (ea *eventReactor) shutdown() {
-	ea.db.close()
+	ea.db.Close()
 	ea.wg.Done()
 }
 
-func NewEventReactor(db DBWrap, wg *sync.WaitGroup) EventReactor {
+func NewEventReactor(db Repo, wg *sync.WaitGroup) EventReactor {
 	return &eventReactor{
 		db: db,
 		wg: wg,
@@ -64,16 +65,14 @@ func NewEventReactor(db DBWrap, wg *sync.WaitGroup) EventReactor {
 }
 
 func (ea *eventReactor) reactEvent(event *Event) error {
-	ks := event.GetTickStateKeys()
-
 	switch event.Type {
 	case EventTypeMint:
-		ea.reactTick(ks[0], uint32(event.TickLower.Uint64()), event.Amount)
-		ea.reactTick(ks[1], uint32(event.TickUpper.Uint64()), new(big.Int).Neg(event.Amount))
+		ea.reactTick(event.Address, int32(event.TickLower.Int64()), event.Amount)
+		ea.reactTick(event.Address, int32(event.TickUpper.Int64()), new(big.Int).Neg(event.Amount))
 
 	case EventTypeBurn:
-		ea.reactTick(ks[0], uint32(event.TickLower.Uint64()), new(big.Int).Neg(event.Amount))
-		ea.reactTick(ks[1], uint32(event.TickUpper.Uint64()), event.Amount)
+		ea.reactTick(event.Address, int32(event.TickLower.Int64()), new(big.Int).Neg(event.Amount))
+		ea.reactTick(event.Address, int32(event.TickUpper.Int64()), event.Amount)
 
 	default:
 		panic(fmt.Sprintf("wrong event: %v", event.Type))
@@ -86,25 +85,21 @@ func IsNotExist(err error) bool {
 	return errors.Is(err, ErrKeyNotFound)
 }
 
-func (ea *eventReactor) getOrNewTickState(k []byte, tick uint32) *TickState {
-	tickState, err := ea.db.GetTickState(k)
+func (ea *eventReactor) reactTick(addr common.Address, tick int32, amount *big.Int) error {
+	tickState := ea.getOrNewTickState(addr, tick)
+	tickState.AddLiquidity(amount)
+	return ea.db.SetTickState(addr, tick, tickState)
+}
+
+func (ea *eventReactor) getOrNewTickState(addr common.Address, tick int32) *TickState {
+	tickState, err := ea.db.GetTickState(addr, tick)
 	if err != nil {
 		if IsNotExist(err) {
 			return NewTickState(tick)
 		} else {
-			panic(fmt.Sprintf("GetTickState err: k=%s, err=%v", k, err)) // TODO
+			panic(fmt.Sprintf("GetTickState err: addr=%v,tick=%d, err=%v", addr.String(), tick, err))
 		}
 	}
 
 	return tickState
-}
-
-func (ea *eventReactor) saveTickState(k []byte, tick *TickState) error {
-	return ea.db.SaveTickState(k, tick)
-}
-
-func (ea *eventReactor) reactTick(k []byte, tick uint32, amount *big.Int) error {
-	tickState := ea.getOrNewTickState(k, tick)
-	tickState.AddLiquidity(amount)
-	return ea.saveTickState(k, tickState)
 }

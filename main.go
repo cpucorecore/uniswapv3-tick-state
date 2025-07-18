@@ -40,7 +40,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	dbWrap := NewDBWrap(rocksDB)
+	dbWrap := NewRepo(rocksDB)
 
 	as := NewAPIServer(dbWrap)
 	as.Start()

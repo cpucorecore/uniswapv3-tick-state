@@ -30,7 +30,7 @@ func TestGetSetHeight(t *testing.T) {
 	}
 	defer db.Close()
 
-	dbw := NewDBWrap(db)
+	dbw := NewRepo(db)
 	height, err := dbw.GetHeight()
 	require.NoError(t, err)
 	require.Equal(t, uint64(0), height)
@@ -56,16 +56,17 @@ func TestGetSetTick(t *testing.T) {
 	}
 	defer db.Close()
 
-	dbw := NewDBWrap(db)
+	dbw := NewRepo(db)
 
 	testTick := &TickState{
 		LiquidityNet: big.NewInt(1),
 	}
 
-	key := []byte("test_tick")
-	require.NoError(t, dbw.SaveTickState(key, testTick))
+	addr := common.HexToAddress("0xffff")
+	tick := int32(0)
+	require.NoError(t, dbw.SetTickState(addr, tick, testTick))
 
-	retrievedTick, err := dbw.GetTickState(key)
+	retrievedTick, err := dbw.GetTickState(addr, tick)
 	require.NoError(t, err)
 	require.True(t, retrievedTick.Equal(testTick), "retrieved tick should be equal to the original tick")
 }
@@ -84,33 +85,33 @@ func TestGetTicks(t *testing.T) {
 	}
 	defer db.Close()
 
-	dbw := NewDBWrap(db)
+	r := NewRepo(db)
 
 	addr := common.HexToAddress("0xffff")
-	kn1 := GetTickStateKey(addr, -1)
-	kn2 := GetTickStateKey(addr, -2)
-	k1 := GetTickStateKey(addr, 1)
-	k2 := GetTickStateKey(addr, 2)
-	k3 := GetTickStateKey(addr, 3)
+	tn1 := int32(-1)
+	tn2 := int32(-2)
+	t1 := int32(1)
+	t2 := int32(2)
+	t3 := int32(3)
 
 	tickTests := []struct {
-		tickKey         []byte
+		tick            int32
 		tickState       *TickState
 		expectTickState *TickState
 	}{
-		{tickKey: k1, tickState: &TickState{LiquidityNet: big.NewInt(1)}, expectTickState: &TickState{LiquidityNet: big.NewInt(-2)}},
-		{tickKey: k3, tickState: &TickState{LiquidityNet: big.NewInt(3)}, expectTickState: &TickState{LiquidityNet: big.NewInt(-1)}},
-		{tickKey: k2, tickState: &TickState{LiquidityNet: big.NewInt(2)}, expectTickState: &TickState{LiquidityNet: big.NewInt(1)}},
-		{tickKey: kn2, tickState: &TickState{LiquidityNet: big.NewInt(-2)}, expectTickState: &TickState{LiquidityNet: big.NewInt(2)}},
-		{tickKey: kn1, tickState: &TickState{LiquidityNet: big.NewInt(-1)}, expectTickState: &TickState{LiquidityNet: big.NewInt(3)}},
+		{tick: t1, tickState: &TickState{LiquidityNet: big.NewInt(1)}, expectTickState: &TickState{LiquidityNet: big.NewInt(-2)}},
+		{tick: t3, tickState: &TickState{LiquidityNet: big.NewInt(3)}, expectTickState: &TickState{LiquidityNet: big.NewInt(-1)}},
+		{tick: t2, tickState: &TickState{LiquidityNet: big.NewInt(2)}, expectTickState: &TickState{LiquidityNet: big.NewInt(1)}},
+		{tick: tn2, tickState: &TickState{LiquidityNet: big.NewInt(-2)}, expectTickState: &TickState{LiquidityNet: big.NewInt(2)}},
+		{tick: tn1, tickState: &TickState{LiquidityNet: big.NewInt(-1)}, expectTickState: &TickState{LiquidityNet: big.NewInt(3)}},
 	}
 
 	for _, tickTest := range tickTests {
-		err = dbw.SaveTickState(tickTest.tickKey, tickTest.tickState)
+		err = r.SetTickState(addr, tickTest.tick, tickTest.tickState)
 		require.NoError(t, err)
 	}
 
-	ticks, err := dbw.GetTickStates(kn2, k3)
+	ticks, err := r.GetTickStates(addr, tn2, t3)
 	require.NoError(t, err)
 	require.Len(t, ticks, 5, "should retrieve 5 ticks")
 	for i, tick := range ticks {
