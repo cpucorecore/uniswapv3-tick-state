@@ -45,6 +45,9 @@ func main() {
 	as := NewAPIServer(dbWrap)
 	as.Start()
 
+	aso := NewAPIServerOnline(G.EthRPC.HTTP)
+	aso.Start()
+
 	wg := &sync.WaitGroup{}
 	wg.Add(1)
 	reactor := NewEventReactor(dbWrap, wg)
@@ -65,7 +68,7 @@ func main() {
 	crawler.Start(ctx)
 
 	dispatcher.MountOutput(crawler)
-	dispatcher.Start(ctx, fromHeight)
+	dispatcher.Start(ctx, fromHeight, false)
 
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)

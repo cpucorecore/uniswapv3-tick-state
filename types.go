@@ -1,7 +1,10 @@
 package main
 
 import (
+	"fmt"
+	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
 	"math/big"
 )
@@ -66,4 +69,27 @@ func (t *TickState) MarshalBinary() ([]byte, error) {
 
 func (t *TickState) UnmarshalBinary(data []byte) error {
 	return t.LiquidityNet.GobDecode(data)
+}
+
+type CallContractReq struct {
+	BlockNumber *big.Int
+	Address     common.Address
+	Data        []byte
+}
+
+func (r *CallContractReq) String() string {
+	return fmt.Sprintf("address: %s, data: [%v]", r.Address.String(), hexutil.Encode(r.Data))
+}
+
+func BuildCallContractReqDynamic(blockNumber *big.Int, address common.Address, abi *abi.ABI, name string, args ...interface{}) *CallContractReq {
+	data, err := abi.Pack(name, args...)
+	if err != nil {
+		panic(err)
+	}
+
+	return &CallContractReq{
+		BlockNumber: blockNumber,
+		Address:     address,
+		Data:        data,
+	}
 }

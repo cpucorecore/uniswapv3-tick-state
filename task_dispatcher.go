@@ -11,7 +11,7 @@ import (
 
 type TaskDispatcher interface {
 	GetFromHeight(ctx context.Context, fromHeight, finishedHeight uint64) uint64
-	Start(ctx context.Context, fromHeight uint64)
+	Start(ctx context.Context, fromHeight uint64, on bool)
 	Stop()
 	OutputMountable[uint64]
 }
@@ -88,7 +88,12 @@ func (d *taskDispatcher) dispatchRange(from, to uint64) (stopped bool, nextBlock
 	return false, 0
 }
 
-func (d *taskDispatcher) Start(ctx context.Context, fromHeight uint64) {
+func (d *taskDispatcher) Start(ctx context.Context, fromHeight uint64, on bool) {
+	if !on {
+		//d.taskReceiver.FinInput()
+		return
+	}
+
 	d.startSubEthHeader(ctx)
 
 	go func() {

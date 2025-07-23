@@ -1,5 +1,5 @@
 .idea
-config.json
+config.json*
 *.log
 uniswapv3-tick-state
 .db
