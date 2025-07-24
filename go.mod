@@ -7,6 +7,7 @@ require (
 	github.com/ethereum/go-ethereum v1.16.1
 	github.com/linxGnu/grocksdb v1.10.1
 	github.com/panjf2000/ants/v2 v2.11.2
+	github.com/shopspring/decimal v1.4.0
 	github.com/stretchr/testify v1.10.0
 	go.uber.org/zap v1.27.0
 )

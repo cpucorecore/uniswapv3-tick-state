@@ -46,6 +46,9 @@ func (a *apiServerOnline) HandlerTicks(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(ticks)
+
+	amount := CalcAmount(ticks.State, ticks.Ticks)
+	json.NewEncoder(w).Encode(amount)
 }
 
 func (a *apiServerOnline) Start() {

@@ -3,3 +3,6 @@ config.json*
 *.log
 uniswapv3-tick-state
 .db
+.venv
+venv
+__pycache__
