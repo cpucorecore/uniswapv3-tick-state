@@ -7,16 +7,17 @@ import (
 )
 
 type TickAmount struct {
-	TickIndex int32
+	TickLower int32
+	TickUpper int32
 	Liquidity *big.Int
 	Amount0   *big.Float
 	Amount1   *big.Float
 }
 
-func CalcAmount(poolState *PoolState, ticks []*TickState, token0Decimals, token1Decimals int) []TickAmount {
-	results := []TickAmount{}
+func CalcAmount(poolState *PoolState, ticks []*TickState, token0Decimals, token1Decimals int) ([]TickAmount, []TickAmount) {
+	allDetails := []TickAmount{}
 	if len(ticks) == 0 {
-		return results
+		return allDetails, nil
 	}
 
 	// 1. 按Tick升序排序
@@ -41,47 +42,72 @@ func CalcAmount(poolState *PoolState, ticks []*TickState, token0Decimals, token1
 	}
 
 	tickSpacing := int(poolState.TickSpacing.Int64())
-	Q96 := new(big.Float).SetInt(new(big.Int).Lsh(big.NewInt(1), 96))
 
-	// 处理精度
-	pow10Token0 := new(big.Float).SetFloat64(math.Pow10(token0Decimals))
-	pow10Token1 := new(big.Float).SetFloat64(math.Pow10(token1Decimals))
-
+	summary := []TickAmount{}
 	for i := 0; i < len(tickBoundaries)-1; i++ {
 		tickLower := tickBoundaries[i]
 		tickUpper := tickBoundaries[i+1]
 		liquidity := prefixLiquidity[i]
-		for t := tickLower; t < tickUpper; t += int32(tickSpacing) {
-			tickA := t
-			tickB := t + int32(tickSpacing)
-
-			// sqrtA = (1.0001 ** (tickA / 2)) * Q96
-			// sqrtB = (1.0001 ** (tickB / 2)) * Q96
-			sqrtA := new(big.Float).Mul(
-				new(big.Float).SetFloat64(math.Pow(1.0001, float64(tickA)/2)), Q96)
-			sqrtB := new(big.Float).Mul(
-				new(big.Float).SetFloat64(math.Pow(1.0001, float64(tickB)/2)), Q96)
-
-			// amount0 = (liquidity * Q96 * (sqrtB - sqrtA) / sqrtB / sqrtA) / 10^token0Decimals
-			liqF := new(big.Float).SetInt(liquidity)
-			amount0 := new(big.Float).Mul(liqF, Q96)
-			amount0.Mul(amount0, new(big.Float).Sub(sqrtB, sqrtA))
-			amount0.Quo(amount0, sqrtB)
-			amount0.Quo(amount0, sqrtA)
-			amount0.Quo(amount0, pow10Token0)
-
-			// amount1 = liquidity * (sqrtB - sqrtA) / Q96 / 10^token1Decimals
-			amount1 := new(big.Float).Mul(liqF, new(big.Float).Sub(sqrtB, sqrtA))
-			amount1.Quo(amount1, Q96)
-			amount1.Quo(amount1, pow10Token1)
-
-			results = append(results, TickAmount{
-				TickIndex: tickA,
-				Liquidity: new(big.Int).Set(liquidity),
-				Amount0:   amount0,
-				Amount1:   amount1,
-			})
-		}
+		amount0Sum, amount1Sum, details := CalcAmountInRange(
+			tickLower, tickUpper, liquidity, tickSpacing, token0Decimals, token1Decimals,
+		)
+		allDetails = append(allDetails, details...)
+		summary = append(summary, TickAmount{
+			TickLower: tickLower,
+			TickUpper: tickUpper,
+			Liquidity: new(big.Int).Set(liquidity),
+			Amount0:   amount0Sum,
+			Amount1:   amount1Sum,
+		})
 	}
-	return results
+
+	return allDetails, summary
+}
+
+// CalcAmountInRange 计算某个[tickLower, tickUpper)区间内的amount0/amount1总和和tickspace明细
+func CalcAmountInRange(
+	tickLower, tickUpper int32,
+	liquidity *big.Int,
+	tickSpacing, token0Decimals, token1Decimals int,
+) (amount0Sum, amount1Sum *big.Float, details []TickAmount) {
+	Q96 := new(big.Float).SetInt(new(big.Int).Lsh(big.NewInt(1), 96))
+	pow10Token0 := new(big.Float).SetFloat64(math.Pow10(token0Decimals))
+	pow10Token1 := new(big.Float).SetFloat64(math.Pow10(token1Decimals))
+
+	amount0Sum = new(big.Float)
+	amount1Sum = new(big.Float)
+	details = []TickAmount{}
+
+	liqF := new(big.Float).SetInt(liquidity)
+	for t := tickLower; t < tickUpper; t += int32(tickSpacing) {
+		tickA := t
+		tickB := t + int32(tickSpacing)
+
+		sqrtA := new(big.Float).Mul(
+			new(big.Float).SetFloat64(math.Pow(1.0001, float64(tickA)/2)), Q96)
+		sqrtB := new(big.Float).Mul(
+			new(big.Float).SetFloat64(math.Pow(1.0001, float64(tickB)/2)), Q96)
+
+		amount0 := new(big.Float).Mul(liqF, Q96)
+		amount0.Mul(amount0, new(big.Float).Sub(sqrtB, sqrtA))
+		amount0.Quo(amount0, sqrtB)
+		amount0.Quo(amount0, sqrtA)
+		amount0.Quo(amount0, pow10Token0)
+
+		amount1 := new(big.Float).Mul(liqF, new(big.Float).Sub(sqrtB, sqrtA))
+		amount1.Quo(amount1, Q96)
+		amount1.Quo(amount1, pow10Token1)
+
+		amount0Sum.Add(amount0Sum, amount0)
+		amount1Sum.Add(amount1Sum, amount1)
+
+		details = append(details, TickAmount{
+			TickLower: tickA,
+			TickUpper: tickB,
+			Liquidity: new(big.Int).Set(liquidity),
+			Amount0:   amount0,
+			Amount1:   amount1,
+		})
+	}
+	return amount0Sum, amount1Sum, details
 }
