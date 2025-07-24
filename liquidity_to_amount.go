@@ -3,7 +3,6 @@ package main
 import (
 	"math"
 	"math/big"
-	"sort"
 )
 
 type TickAmount struct {
@@ -14,29 +13,23 @@ type TickAmount struct {
 	Amount1   *big.Float
 }
 
-func CalcAmount(poolState *PoolState, ticks []*TickState, token0Decimals, token1Decimals int) ([]TickAmount, []TickAmount) {
+func CalcAmount(poolState *PoolState, ticks []*TickState, tickLower, tickUpper int32, token0Decimals, token1Decimals int) ([]TickAmount, []TickAmount) {
 	allDetails := []TickAmount{}
 	if len(ticks) == 0 {
 		return allDetails, nil
 	}
 
-	// 1. 按Tick升序排序
-	sortedTicks := make([]*TickState, len(ticks))
-	copy(sortedTicks, ticks)
-	sort.Slice(sortedTicks, func(i, j int) bool {
-		return sortedTicks[i].Tick < sortedTicks[j].Tick
-	})
-
-	// 2. 构建所有tick边界
-	tickBoundaries := make([]int32, len(sortedTicks))
-	for i, t := range sortedTicks {
+	// ticks 已经排序，无需再排序
+	// 构建所有tick边界
+	tickBoundaries := make([]int32, len(ticks))
+	for i, t := range ticks {
 		tickBoundaries[i] = t.Tick
 	}
 
-	// 3. 计算每个tick区间的liquidity前缀和
-	prefixLiquidity := make([]*big.Int, len(sortedTicks))
+	// 计算每个tick区间的liquidity前缀和
+	prefixLiquidity := make([]*big.Int, len(ticks))
 	currentLiquidity := big.NewInt(0)
-	for i, t := range sortedTicks {
+	for i, t := range ticks {
 		currentLiquidity = new(big.Int).Add(currentLiquidity, t.LiquidityNet)
 		prefixLiquidity[i] = new(big.Int).Set(currentLiquidity)
 	}
@@ -45,23 +38,36 @@ func CalcAmount(poolState *PoolState, ticks []*TickState, token0Decimals, token1
 
 	summary := []TickAmount{}
 	for i := 0; i < len(tickBoundaries)-1; i++ {
-		tickLower := tickBoundaries[i]
-		tickUpper := tickBoundaries[i+1]
+		segLower := tickBoundaries[i]
+		segUpper := tickBoundaries[i+1]
 		liquidity := prefixLiquidity[i]
 		amount0Sum, amount1Sum, details := CalcAmountInRange(
-			tickLower, tickUpper, liquidity, tickSpacing, token0Decimals, token1Decimals,
+			segLower, segUpper, liquidity, tickSpacing, token0Decimals, token1Decimals,
 		)
 		allDetails = append(allDetails, details...)
 		summary = append(summary, TickAmount{
-			TickLower: tickLower,
-			TickUpper: tickUpper,
+			TickLower: segLower,
+			TickUpper: segUpper,
 			Liquidity: new(big.Int).Set(liquidity),
 			Amount0:   amount0Sum,
 			Amount1:   amount1Sum,
 		})
 	}
 
-	return allDetails, summary
+	// 只保留视图区间内的明细和summary
+	filteredDetails := []TickAmount{}
+	for _, d := range allDetails {
+		if d.TickLower >= tickLower && d.TickUpper <= tickUpper {
+			filteredDetails = append(filteredDetails, d)
+		}
+	}
+	filteredSummary := []TickAmount{}
+	for _, s := range summary {
+		if s.TickLower >= tickLower && s.TickUpper <= tickUpper {
+			filteredSummary = append(filteredSummary, s)
+		}
+	}
+	return filteredDetails, filteredSummary
 }
 
 // CalcAmountInRange 计算某个[tickLower, tickUpper)区间内的amount0/amount1总和和tickspace明细

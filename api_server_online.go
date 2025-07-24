@@ -20,6 +20,11 @@ type apiServerOnline struct {
 	cache Cache
 }
 
+const (
+	MinTick = -887272
+	MaxTick = 887272
+)
+
 func (a *apiServerOnline) HandlerTicks(w http.ResponseWriter, r *http.Request) {
 	addressStr := r.URL.Query().Get("address")
 	tickLowerStr := r.URL.Query().Get("tickLower")
@@ -59,6 +64,8 @@ func (a *apiServerOnline) HandlerTicks(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(fmt.Sprintf("get tick states error: %v", err)))
 		return
 	}
+	bytes, _ := json.Marshal(ticks)
+	Log.Info(fmt.Sprintf("get tick states: %s", string(bytes)))
 
 	//w.Header().Set("Content-Type", "application/json")
 	//json.NewEncoder(w).Encode(ticks)
@@ -67,7 +74,12 @@ func (a *apiServerOnline) HandlerTicks(w http.ResponseWriter, r *http.Request) {
 	if pair.TokensReversed {
 		token0, token1 = pair.Token1Core, pair.Token0Core
 	}
-	amount, summary := CalcAmount(ticks.State, ticks.Ticks, int(token0.Decimals), int(token1.Decimals))
+	if tickLower == 0 && tickUpper == 0 {
+		tickLower = MinTick
+		tickUpper = MaxTick
+	}
+
+	amount, summary := CalcAmount(ticks.State, ticks.Ticks, int32(tickLower), int32(tickUpper), int(token0.Decimals), int(token1.Decimals))
 	//json.NewEncoder(w).Encode(amount)
 	//json.NewEncoder(w).Encode(summary)
 
