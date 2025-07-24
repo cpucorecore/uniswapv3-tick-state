@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"github.com/go-redis/redis/v8"
 	"go.uber.org/zap"
 	"os"
 	"os/signal"
@@ -45,7 +46,14 @@ func main() {
 	as := NewAPIServer(dbWrap)
 	as.Start()
 
-	aso := NewAPIServerOnline(G.EthRPC.HTTP)
+	redisCli := redis.NewClient(&redis.Options{
+		Addr:     G.Redis.Addr,
+		Username: G.Redis.Username,
+		Password: G.Redis.Password,
+	})
+	cache := NewTwoTierCache(redisCli)
+
+	aso := NewAPIServerOnline(G.EthRPC.HTTP, cache)
 	aso.Start()
 
 	wg := &sync.WaitGroup{}

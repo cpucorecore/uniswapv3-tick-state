@@ -22,10 +22,17 @@ type BlockCrawlerConf struct {
 	FromHeight uint64 `json:"from_height"`
 }
 
+type RedisConf struct {
+	Addr     string `json:"addr"`
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
+
 type Config struct {
 	Log          *LogConf          `json:"log"`
 	EthRPC       *EthRPCConf       `json:"eth_rpc"`
 	BlockCrawler *BlockCrawlerConf `json:"block_crawler"`
+	Redis        *RedisConf        `json:"redis"`
 }
 
 var (
@@ -43,6 +50,11 @@ var (
 		BlockCrawler: &BlockCrawlerConf{
 			PoolSize:   1,
 			FromHeight: 0,
+		},
+		Redis: &RedisConf{
+			Addr:     "localhost:6379",
+			Username: "",
+			Password: "",
 		},
 	}
 

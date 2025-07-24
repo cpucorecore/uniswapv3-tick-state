@@ -4,12 +4,11 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"github.com/ethereum/go-ethereum/common"
+	"go.uber.org/zap"
 	"html/template"
 	"net/http"
 	"strconv"
-
-	"github.com/ethereum/go-ethereum/common"
-	"go.uber.org/zap"
 )
 
 type APIServerOnline interface {
@@ -17,7 +16,8 @@ type APIServerOnline interface {
 }
 
 type apiServerOnline struct {
-	cc *ContractCaller
+	cc    *ContractCaller
+	cache Cache
 }
 
 func (a *apiServerOnline) HandlerTicks(w http.ResponseWriter, r *http.Request) {
@@ -31,6 +31,19 @@ func (a *apiServerOnline) HandlerTicks(w http.ResponseWriter, r *http.Request) {
 	}
 
 	address := common.HexToAddress(addressStr)
+	pair, ok := a.cache.GetPair(address)
+	if !ok {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("no pool info"))
+		return
+	}
+
+	if pair.Filtered {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("pool filtered"))
+		return
+	}
+
 	tickLower, err1 := strconv.ParseInt(tickLowerStr, 10, 32)
 	tickUpper, err2 := strconv.ParseInt(tickUpperStr, 10, 32)
 	if err1 != nil || err2 != nil {
@@ -50,7 +63,11 @@ func (a *apiServerOnline) HandlerTicks(w http.ResponseWriter, r *http.Request) {
 	//w.Header().Set("Content-Type", "application/json")
 	//json.NewEncoder(w).Encode(ticks)
 
-	amount, summary := CalcAmount(ticks.State, ticks.Ticks, 18, 18)
+	token0, token1 := pair.Token0Core, pair.Token1Core
+	if pair.TokensReversed {
+		token0, token1 = pair.Token1Core, pair.Token0Core
+	}
+	amount, summary := CalcAmount(ticks.State, ticks.Ticks, int(token0.Decimals), int(token1.Decimals))
 	//json.NewEncoder(w).Encode(amount)
 	//json.NewEncoder(w).Encode(summary)
 
@@ -74,10 +91,11 @@ func (a *apiServerOnline) Start() {
 	}()
 }
 
-func NewAPIServerOnline(url string) APIServer {
+func NewAPIServerOnline(url string, cache Cache) APIServer {
 	cc := NewContractCaller(url)
 	return &apiServerOnline{
-		cc: cc,
+		cc:    cc,
+		cache: cache,
 	}
 }
 

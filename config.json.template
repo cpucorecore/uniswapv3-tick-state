@@ -12,5 +12,10 @@
     "block_crawler": {
         "pool_size": 1,
         "from_height": 0
+    },
+    "redis": {
+        "addr": "localhost:6379",
+        "username": "",
+        "password": ""
     }
 }
