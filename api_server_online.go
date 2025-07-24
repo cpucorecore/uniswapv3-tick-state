@@ -1,12 +1,15 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
-	"github.com/ethereum/go-ethereum/common"
-	"go.uber.org/zap"
+	"html/template"
 	"net/http"
 	"strconv"
+
+	"github.com/ethereum/go-ethereum/common"
+	"go.uber.org/zap"
 )
 
 type APIServerOnline interface {
@@ -44,12 +47,21 @@ func (a *apiServerOnline) HandlerTicks(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(ticks)
+	//w.Header().Set("Content-Type", "application/json")
+	//json.NewEncoder(w).Encode(ticks)
 
 	amount, summary := CalcAmount(ticks.State, ticks.Ticks, 18, 18)
-	json.NewEncoder(w).Encode(amount)
-	json.NewEncoder(w).Encode(summary)
+	//json.NewEncoder(w).Encode(amount)
+	//json.NewEncoder(w).Encode(summary)
+
+	htmlStr, err := RenderTickAmountCharts(amount, summary)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("render error"))
+		return
+	}
+	w.Header().Set("Content-Type", "text/html")
+	w.Write([]byte(htmlStr))
 }
 
 func (a *apiServerOnline) Start() {
@@ -67,4 +79,70 @@ func NewAPIServerOnline(url string) APIServer {
 	return &apiServerOnline{
 		cc: cc,
 	}
+}
+
+// RenderTickAmountCharts 生成包含两个图表的HTML
+func RenderTickAmountCharts(amount, summary []TickAmount) (string, error) {
+	amountJSON, err := json.Marshal(amount)
+	if err != nil {
+		return "", err
+	}
+	summaryJSON, err := json.Marshal(summary)
+	if err != nil {
+		return "", err
+	}
+
+	html := `
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Tick Amount Chart</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <h2>TickSpace 明细</h2>
+    <canvas id="amountChart"></canvas>
+    <h2>原始Tick区间合计</h2>
+    <canvas id="summaryChart"></canvas>
+    <script>
+        const amount = {{.Amount}};
+        const summary = {{.Summary}};
+
+        function getData(arr) {
+            return {
+                labels: arr.map(x => x.TickLower),
+                datasets: [{
+                    label: 'amount0',
+                    data: arr.map(x => Number(x.Amount0)),
+                    backgroundColor: 'rgba(54, 162, 235, 0.5)'
+                }]
+            }
+        }
+
+        new Chart(document.getElementById('amountChart'), {
+            type: 'bar',
+            data: getData(amount),
+            options: {scales: {x: {title: {display: true, text: 'TickLower'}}, y: {title: {display: true, text: 'Amount0'}}}}
+        });
+
+        new Chart(document.getElementById('summaryChart'), {
+            type: 'bar',
+            data: getData(summary),
+            options: {scales: {x: {title: {display: true, text: 'TickLower'}}, y: {title: {display: true, text: 'Amount0'}}}}
+        });
+    </script>
+</body>
+</html>
+`
+	t := template.Must(template.New("chart").Delims("{{", "}}").Parse(html))
+	var buf bytes.Buffer
+	err = t.Execute(&buf, map[string]interface{}{
+		"Amount":  template.JS(amountJSON),
+		"Summary": template.JS(summaryJSON),
+	})
+	if err != nil {
+		return "", err
+	}
+	return buf.String(), nil
 }
