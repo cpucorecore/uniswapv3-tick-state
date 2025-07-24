@@ -47,7 +47,7 @@ func (a *apiServerOnline) HandlerTicks(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(ticks)
 
-	amount := CalcAmount(ticks.State, ticks.Ticks)
+	amount := CalcAmount(ticks.State, ticks.Ticks, 18, 18)
 	json.NewEncoder(w).Encode(amount)
 }
 

@@ -1,47 +1,87 @@
 package main
 
 import (
-	"github.com/shopspring/decimal"
+	"math"
 	"math/big"
+	"sort"
 )
 
 type TickAmount struct {
 	TickIndex int32
 	Liquidity *big.Int
-	Amount0   *big.Int
-	Amount1   *big.Int
+	Amount0   *big.Float
+	Amount1   *big.Float
 }
 
-// tickToSqrtPrice returns sqrt(1.0001^tick) as decimal.Decimal
-func tickToSqrtPrice(tick int32) *big.Int {
-	exp := decimal.NewFromFloat(float64(tick) / 2.0)
-	base := decimal.NewFromFloat(1.0001)
-	return base.Pow(exp).BigInt()
-}
-
-func CalcAmount(poolState *PoolState, ticks []*TickState) []TickAmount {
+func CalcAmount(poolState *PoolState, ticks []*TickState, token0Decimals, token1Decimals int) []TickAmount {
 	results := []TickAmount{}
-	L := big.NewInt(0)
-	for i := 0; i < len(ticks)-1; i++ {
-		t := ticks[i]
-		nextT := ticks[i+1]
-		L.Add(L, t.LiquidityNet)
+	if len(ticks) == 0 {
+		return results
+	}
 
-		sqrtPa := tickToSqrtPrice(t.Tick)
-		sqrtPb := tickToSqrtPrice(nextT.Tick)
+	// 1. 按Tick升序排序
+	sortedTicks := make([]*TickState, len(ticks))
+	copy(sortedTicks, ticks)
+	sort.Slice(sortedTicks, func(i, j int) bool {
+		return sortedTicks[i].Tick < sortedTicks[j].Tick
+	})
 
-		invSqrtPa := big.NewInt(0).Div(big.NewInt(1), sqrtPa)
-		invSqrtPb := big.NewInt(0).Div(big.NewInt(1), sqrtPb)
+	// 2. 构建所有tick边界
+	tickBoundaries := make([]int32, len(sortedTicks))
+	for i, t := range sortedTicks {
+		tickBoundaries[i] = t.Tick
+	}
 
-		amount0 := big.NewInt(0).Mul(L, big.NewInt(0).Sub(invSqrtPa, invSqrtPb))
-		amount1 := big.NewInt(0).Mul(L, big.NewInt(0).Sub(sqrtPb, sqrtPa))
+	// 3. 计算每个tick区间的liquidity前缀和
+	prefixLiquidity := make([]*big.Int, len(sortedTicks))
+	currentLiquidity := big.NewInt(0)
+	for i, t := range sortedTicks {
+		currentLiquidity = new(big.Int).Add(currentLiquidity, t.LiquidityNet)
+		prefixLiquidity[i] = new(big.Int).Set(currentLiquidity)
+	}
 
-		results = append(results, TickAmount{
-			TickIndex: t.Tick,
-			Liquidity: L,
-			Amount0:   amount0,
-			Amount1:   amount1,
-		})
+	tickSpacing := int(poolState.TickSpacing.Int64())
+	Q96 := new(big.Float).SetInt(new(big.Int).Lsh(big.NewInt(1), 96))
+
+	// 处理精度
+	pow10Token0 := new(big.Float).SetFloat64(math.Pow10(token0Decimals))
+	pow10Token1 := new(big.Float).SetFloat64(math.Pow10(token1Decimals))
+
+	for i := 0; i < len(tickBoundaries)-1; i++ {
+		tickLower := tickBoundaries[i]
+		tickUpper := tickBoundaries[i+1]
+		liquidity := prefixLiquidity[i]
+		for t := tickLower; t < tickUpper; t += int32(tickSpacing) {
+			tickA := t
+			tickB := t + int32(tickSpacing)
+
+			// sqrtA = (1.0001 ** (tickA / 2)) * Q96
+			// sqrtB = (1.0001 ** (tickB / 2)) * Q96
+			sqrtA := new(big.Float).Mul(
+				new(big.Float).SetFloat64(math.Pow(1.0001, float64(tickA)/2)), Q96)
+			sqrtB := new(big.Float).Mul(
+				new(big.Float).SetFloat64(math.Pow(1.0001, float64(tickB)/2)), Q96)
+
+			// amount0 = (liquidity * Q96 * (sqrtB - sqrtA) / sqrtB / sqrtA) / 10^token0Decimals
+			liqF := new(big.Float).SetInt(liquidity)
+			amount0 := new(big.Float).Mul(liqF, Q96)
+			amount0.Mul(amount0, new(big.Float).Sub(sqrtB, sqrtA))
+			amount0.Quo(amount0, sqrtB)
+			amount0.Quo(amount0, sqrtA)
+			amount0.Quo(amount0, pow10Token0)
+
+			// amount1 = liquidity * (sqrtB - sqrtA) / Q96 / 10^token1Decimals
+			amount1 := new(big.Float).Mul(liqF, new(big.Float).Sub(sqrtB, sqrtA))
+			amount1.Quo(amount1, Q96)
+			amount1.Quo(amount1, pow10Token1)
+
+			results = append(results, TickAmount{
+				TickIndex: tickA,
+				Liquidity: new(big.Int).Set(liquidity),
+				Amount0:   amount0,
+				Amount1:   amount1,
+			})
+		}
 	}
 	return results
 }
