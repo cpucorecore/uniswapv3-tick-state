@@ -4,12 +4,13 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"github.com/ethereum/go-ethereum/common"
-	"go.uber.org/zap"
 	"html/template"
 	"net/http"
 	"strconv"
 	"time"
+
+	"github.com/ethereum/go-ethereum/common"
+	"go.uber.org/zap"
 )
 
 type APIServerOnline interface {
@@ -100,9 +101,76 @@ func (a *apiServerOnline) HandlerTicks(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte(htmlStr))
 }
 
+func (a *apiServerOnline) HandlerTicks2(w http.ResponseWriter, r *http.Request) {
+	addressStr := r.URL.Query().Get("address")
+	tickOffsetStr := r.URL.Query().Get("TickOffset")
+	if addressStr == "" || tickOffsetStr == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("missing address or TickOffset"))
+		return
+	}
+
+	address := common.HexToAddress(addressStr)
+	pair, ok := a.cache.GetPair(address)
+	if !ok {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("no pool info"))
+		return
+	}
+	if pair.Filtered {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("pool filtered"))
+		return
+	}
+
+	tickOffset, err := strconv.ParseInt(tickOffsetStr, 10, 32)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("invalid TickCount"))
+		return
+	}
+
+	now := time.Now()
+	ticks, err := a.cc.CallGetAllTicks(address)
+	Log.Info("CallGetAllTicks duration", zap.Any("ms", time.Since(now).Milliseconds()))
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(fmt.Sprintf("get tick states error: %v", err)))
+		return
+	}
+
+	token0, token1 := pair.Token0Core, pair.Token1Core
+	if pair.TokensReversed {
+		token0, token1 = pair.Token1Core, pair.Token0Core
+	}
+
+	currentTick := int32(ticks.State.Tick.Int64())
+	tickSpacing := int32(ticks.State.TickSpacing.Int64())
+	// 计算窗口
+	centerTick := (currentTick / tickSpacing) * tickSpacing
+	tickLower := centerTick - int32(tickOffset)*tickSpacing
+	tickUpper := centerTick + (int32(tickOffset)+1)*tickSpacing
+
+	now = time.Now()
+	amount, summary := CalcAmount(ticks.State, ticks.Ticks, tickLower, tickUpper, int(token0.Decimals), int(token1.Decimals))
+	Log.Info("CalcAmount duration", zap.Any("ms", time.Since(now).Milliseconds()))
+
+	now = time.Now()
+	htmlStr, err := RenderTickAmountCharts(amount, summary, currentTick, tickSpacing)
+	Log.Info("RenderTickAmountCharts duration", zap.Any("ms", time.Since(now).Milliseconds()))
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("render error"))
+		return
+	}
+	w.Header().Set("Content-Type", "text/html")
+	w.Write([]byte(htmlStr))
+}
+
 func (a *apiServerOnline) Start() {
 	go func() {
 		http.HandleFunc("/online/ticks", a.HandlerTicks)
+		http.HandleFunc("/online/ticks2", a.HandlerTicks2)
 		err := http.ListenAndServe(":39999", nil)
 		if err != nil {
 			panic(err)
