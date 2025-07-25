@@ -83,7 +83,7 @@ func (a *apiServerOnline) HandlerTicks(w http.ResponseWriter, r *http.Request) {
 	//json.NewEncoder(w).Encode(amount)
 	//json.NewEncoder(w).Encode(summary)
 
-	htmlStr, err := RenderTickAmountCharts(amount, summary)
+	htmlStr, err := RenderTickAmountCharts(amount, summary, int32(ticks.State.Tick.Int64()), int32(ticks.State.TickSpacing.Int64()))
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte("render error"))
@@ -112,7 +112,7 @@ func NewAPIServerOnline(url string, cache Cache) APIServer {
 }
 
 // RenderTickAmountCharts 生成包含两个图表的HTML
-func RenderTickAmountCharts(amount, summary []TickAmount) (string, error) {
+func RenderTickAmountCharts(amount, summary []TickAmount, currentTick, tickSpacing int32) (string, error) {
 	amountJSON, err := json.Marshal(amount)
 	if err != nil {
 		return "", err
@@ -138,29 +138,68 @@ func RenderTickAmountCharts(amount, summary []TickAmount) (string, error) {
     <script>
         const amount = {{.Amount}};
         const summary = {{.Summary}};
+        const currentTick = {{.CurrentTick}};
+		const tickSpacing = {{.TickSpacing}};
 
-        function getData(arr) {
-            return {
-                labels: arr.map(x => x.TickLower),
+        function getTicksAndPrices(arr) {
+            const ticks = arr.map(x => x.TickLower);
+            const prices = ticks.map(tick => Number(Math.pow(1.0001, tick).toPrecision(5)));
+            return {ticks, prices};
+        }
+
+		function getBarColors(ticks, tickSpacing, currentTick) {
+			return ticks.map(tickLower => {
+				const tickUpper = tickLower + tickSpacing;
+				return (currentTick >= tickLower && currentTick <= tickUpper)
+					? 'rgba(255, 99, 132, 0.8)'
+					: 'rgba(54, 162, 235, 0.5)';
+			});
+		}
+
+        function makeChart(canvasId, arr, currentTick) {
+            const {ticks, prices} = getTicksAndPrices(arr);
+            const barColors = getBarColors(ticks, tickSpacing, currentTick);
+            const data = {
+                labels: ticks,
                 datasets: [{
                     label: 'amount0',
                     data: arr.map(x => Number(x.Amount0)),
-                    backgroundColor: 'rgba(54, 162, 235, 0.5)'
+                    backgroundColor: barColors
                 }]
-            }
+            };
+            new Chart(document.getElementById(canvasId), {
+                type: 'bar',
+                data: data,
+                options: {
+                    scales: {
+                        x: {
+                            title: { display: true, text: 'Tick' },
+                            ticks: {
+                                callback: function(value, index) {
+                                    return ticks[index];
+                                }
+                            }
+                        },
+                        x2: {
+                            position: 'top',
+                            title: { display: true, text: 'Price' },
+                            grid: { drawOnChartArea: false },
+                            ticks: {
+                                callback: function(value, index) {
+                                    return prices[index];
+                                }
+                            }
+                        },
+                        y: {
+                            title: { display: true, text: 'Amount0' }
+                        }
+                    }
+                }
+            });
         }
 
-        new Chart(document.getElementById('amountChart'), {
-            type: 'bar',
-            data: getData(amount),
-            options: {scales: {x: {title: {display: true, text: 'TickLower'}}, y: {title: {display: true, text: 'Amount0'}}}}
-        });
-
-        new Chart(document.getElementById('summaryChart'), {
-            type: 'bar',
-            data: getData(summary),
-            options: {scales: {x: {title: {display: true, text: 'TickLower'}}, y: {title: {display: true, text: 'Amount0'}}}}
-        });
+        makeChart('amountChart', amount, currentTick);
+        makeChart('summaryChart', summary, currentTick);
     </script>
 </body>
 </html>
@@ -168,8 +207,10 @@ func RenderTickAmountCharts(amount, summary []TickAmount) (string, error) {
 	t := template.Must(template.New("chart").Delims("{{", "}}").Parse(html))
 	var buf bytes.Buffer
 	err = t.Execute(&buf, map[string]interface{}{
-		"Amount":  template.JS(amountJSON),
-		"Summary": template.JS(summaryJSON),
+		"Amount":      template.JS(amountJSON),
+		"Summary":     template.JS(summaryJSON),
+		"CurrentTick": currentTick,
+		"TickSpacing": tickSpacing,
 	})
 	if err != nil {
 		return "", err
