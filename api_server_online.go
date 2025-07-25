@@ -9,6 +9,7 @@ import (
 	"html/template"
 	"net/http"
 	"strconv"
+	"time"
 )
 
 type APIServerOnline interface {
@@ -58,7 +59,9 @@ func (a *apiServerOnline) HandlerTicks(w http.ResponseWriter, r *http.Request) {
 	}
 	Log.Info("req", zap.Int64("tickLower", tickLower), zap.Int64("tickUpper", tickUpper))
 
+	now := time.Now()
 	ticks, err := a.cc.CallGetAllTicks(address)
+	Log.Info("CallGetAllTicks duration", zap.Any("ms", time.Since(now).Milliseconds()))
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte(fmt.Sprintf("get tick states error: %v", err)))
@@ -79,11 +82,15 @@ func (a *apiServerOnline) HandlerTicks(w http.ResponseWriter, r *http.Request) {
 		tickUpper = MaxTick
 	}
 
+	now = time.Now()
 	amount, summary := CalcAmount(ticks.State, ticks.Ticks, int32(tickLower), int32(tickUpper), int(token0.Decimals), int(token1.Decimals))
+	Log.Info("CalcAmount duration", zap.Any("ms", time.Since(now).Milliseconds()))
 	//json.NewEncoder(w).Encode(amount)
 	//json.NewEncoder(w).Encode(summary)
 
+	now = time.Now()
 	htmlStr, err := RenderTickAmountCharts(amount, summary, int32(ticks.State.Tick.Int64()), int32(ticks.State.TickSpacing.Int64()))
+	Log.Info("RenderTickAmountCharts duration", zap.Any("ms", time.Since(now).Milliseconds()))
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte("render error"))
