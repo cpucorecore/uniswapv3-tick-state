@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"html/template"
+	"math"
 	"net/http"
 	"strconv"
 	"time"
@@ -90,7 +91,7 @@ func (a *apiServerOnline) HandlerTicks(w http.ResponseWriter, r *http.Request) {
 	//json.NewEncoder(w).Encode(summary)
 
 	now = time.Now()
-	htmlStr, err := RenderTickAmountCharts(amount, summary, int32(ticks.State.Tick.Int64()), int32(ticks.State.TickSpacing.Int64()))
+	htmlStr, err := RenderTickAmountCharts(amount, summary, int32(ticks.State.Tick.Int64()), int32(ticks.State.TickSpacing.Int64()), token0.Symbol, token1.Symbol)
 	Log.Info("RenderTickAmountCharts duration", zap.Any("ms", time.Since(now).Milliseconds()))
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -156,7 +157,7 @@ func (a *apiServerOnline) HandlerTicks2(w http.ResponseWriter, r *http.Request) 
 	Log.Info("CalcAmount duration", zap.Any("ms", time.Since(now).Milliseconds()))
 
 	now = time.Now()
-	htmlStr, err := RenderTickAmountCharts(amount, summary, currentTick, tickSpacing)
+	htmlStr, err := RenderTickAmountCharts(amount, summary, currentTick, tickSpacing, token0.Symbol, token1.Symbol)
 	Log.Info("RenderTickAmountCharts duration", zap.Any("ms", time.Since(now).Milliseconds()))
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -187,7 +188,7 @@ func NewAPIServerOnline(url string, cache Cache) APIServer {
 }
 
 // RenderTickAmountCharts 生成包含两个图表的HTML
-func RenderTickAmountCharts(amount, summary []TickAmount, currentTick, tickSpacing int32) (string, error) {
+func RenderTickAmountCharts(amount, summary []TickAmount, currentTick, tickSpacing int32, token0Symbol, token1Symbol string) (string, error) {
 	amountJSON, err := json.Marshal(amount)
 	if err != nil {
 		return "", err
@@ -196,6 +197,9 @@ func RenderTickAmountCharts(amount, summary []TickAmount, currentTick, tickSpaci
 	if err != nil {
 		return "", err
 	}
+
+	// 计算当前tick对应的价格，保留5位有效数字
+	currentPrice := fmt.Sprintf("%g", float64Pow(1.0001, float64(currentTick), 5))
 
 	html := `
 <!DOCTYPE html>
@@ -206,6 +210,9 @@ func RenderTickAmountCharts(amount, summary []TickAmount, currentTick, tickSpaci
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
+    <div style="margin-bottom: 16px;">
+        <b>交易对:</b> {{.Token0Symbol}}/{{.Token1Symbol}} &nbsp; <b>当前 Tick:</b> {{.CurrentTick}} &nbsp; <b>TickSpacing:</b> {{.TickSpacing}} &nbsp; <b>当前 Tick 价格:</b> {{.CurrentPrice}}
+    </div>
     <h2>TickSpace 明细</h2>
     <canvas id="amountChart"></canvas>
     <h2>原始Tick区间合计</h2>
@@ -282,13 +289,25 @@ func RenderTickAmountCharts(amount, summary []TickAmount, currentTick, tickSpaci
 	t := template.Must(template.New("chart").Delims("{{", "}}").Parse(html))
 	var buf bytes.Buffer
 	err = t.Execute(&buf, map[string]interface{}{
-		"Amount":      template.JS(amountJSON),
-		"Summary":     template.JS(summaryJSON),
-		"CurrentTick": currentTick,
-		"TickSpacing": tickSpacing,
+		"Amount":       template.JS(amountJSON),
+		"Summary":      template.JS(summaryJSON),
+		"CurrentTick":  currentTick,
+		"TickSpacing":  tickSpacing,
+		"CurrentPrice": currentPrice,
+		"Token0Symbol": token0Symbol,
+		"Token1Symbol": token1Symbol,
 	})
 	if err != nil {
 		return "", err
 	}
 	return buf.String(), nil
+}
+
+// float64Pow returns base^exp, 保留n位有效数字
+func float64Pow(base, exp float64, precision int) float64 {
+	v := math.Pow(base, exp)
+	// 保留n位有效数字
+	format := "%." + fmt.Sprintf("%d", precision) + "g"
+	res, _ := strconv.ParseFloat(fmt.Sprintf(format, v), 64)
+	return res
 }
