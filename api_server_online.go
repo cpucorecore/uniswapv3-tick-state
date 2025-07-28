@@ -169,21 +169,6 @@ func (a *apiServerOnline) HandlerTicks2(w http.ResponseWriter, r *http.Request) 
 	w.Write([]byte(htmlStr))
 }
 
-func (a *apiServerOnline) GetAndGet(addr common.Address) (*PoolTicks, error) {
-	ok, err := a.db.PoolExists(addr)
-	if err != nil || !ok {
-		s, err := a.cc.CallGetAllTicks(addr)
-		if err != nil {
-			return nil, err
-		}
-
-		a.db.SetPoolState(addr, s)
-		return s, nil
-	}
-
-	return a.db.GetPoolState(addr)
-}
-
 func (a *apiServerOnline) HandlerTicks3(w http.ResponseWriter, r *http.Request) {
 	// 查询address是否初始化
 	// 如果没有初始化,调用CallGetAllTicks获取当前pool的所有tick信息并保存到db(包含tickSpacing),得到所有tick信息:ticks;同时event_reactor开始处理该address的事件,根据事件(Mint/Burn)更新tick状态,根据事件(Swap)更新currentTick(问题,获取到ticks信息的高度是H,此时主流程的高度已经处理到H+2,就会丢失2个区块的状态)
@@ -228,8 +213,10 @@ func (a *apiServerOnline) HandlerTicks3(w http.ResponseWriter, r *http.Request) 
 
 	now := time.Now()
 
-	ticks, err := a.GetAndGet(address)
-	Log.Info("CallGetAllTicks duration", zap.Any("ms", time.Since(now).Milliseconds()))
+	ticks, err := GetAndGet(a.db, a.cc, address)
+	bs, _ := json.Marshal(ticks)
+	Log.Info("GetAndGetTicks duration", zap.Any("ms", time.Since(now).Milliseconds()), zap.String("addr", addressStr), zap.String("ts", string(bs)))
+
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte(fmt.Sprintf("get tick states error: %v", err)))

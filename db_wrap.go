@@ -327,21 +327,21 @@ func (r *repo) SetPoolState(poolAddr common.Address, poolTicks *PoolTicks) error
 		return err
 	}
 
-	err = r.SetCurrentTick(poolAddr, int32(poolTicks.State.Tick.Uint64()))
+	err = r.SetCurrentTick(poolAddr, int32(poolTicks.State.Tick.Int64()))
 	if err != nil {
 		return err
 	}
 
-	err = r.SetTickSpacing(poolAddr, int32(poolTicks.State.TickSpacing.Uint64()))
+	err = r.SetTickSpacing(poolAddr, int32(poolTicks.State.TickSpacing.Int64()))
 	if err != nil {
 		return err
 	}
 	for _, ts := range poolTicks.Ticks {
-		err = r.SetTickState(poolAddr, int32(poolTicks.State.Tick.Uint64()), ts)
+		err = r.SetTickState(poolAddr, ts.Tick, ts)
 		if err != nil {
 			return err
 		}
 	}
-	
+
 	return nil
 }

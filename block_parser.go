@@ -126,7 +126,7 @@ func ParseSwap(log *types.Log) (*Event, error) {
 	return &Event{
 		Address: log.Address,
 		Type:    EventTypeSwap,
-		Amount:  input[6].(*big.Int),
+		Tick:    input[4].(*big.Int),
 	}, nil
 }
 

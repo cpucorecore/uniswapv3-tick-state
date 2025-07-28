@@ -33,38 +33,50 @@ type eventReactor struct {
 	cc    *ContractCaller
 }
 
+func GetAndGet(db Repo, cc *ContractCaller, addr common.Address) (*PoolTicks, error) {
+	ok, err := db.PoolExists(addr)
+	if err != nil || !ok {
+		s, err := cc.CallGetAllTicks(addr)
+		if err != nil {
+			return nil, err
+		}
+
+		err = db.SetPoolState(addr, s)
+		if err != nil {
+			return nil, err
+		}
+
+		return s, nil
+	}
+
+	return db.GetPoolState(addr)
+}
+
 func (ea *eventReactor) ReactBlockEvent(blockEvent *BlockEvent) error {
 	for _, e := range blockEvent.Events {
 		pair, ok := ea.cache.GetPair(e.Address)
 		if !ok {
+			Log.Info("pool not cached", zap.String("addr", e.Address.String()))
 			return nil
 		}
 
 		if pair.Filtered {
+			Log.Info("pool filtered", zap.String("addr", e.Address.String()))
 			return nil
 		}
 
 		if pair.ProtocolId != 3 {
+			Log.Info("pool not v3", zap.String("addr", e.Address.String()))
 			return nil
 		}
 
-		ok, _ = ea.db.PoolExists(e.Address)
-		if !ok {
-			ticks, err := ea.cc.CallGetAllTicks(e.Address)
-			if err != nil {
-				// TODO check
-				continue
-			}
-			ea.db.SetCurrentTick(e.Address, int32(ticks.State.Tick.Int64()))
-			ea.db.SetTickSpacing(e.Address, int32(ticks.State.Tick.Int64()))
-			for _, tick := range ticks.Ticks {
-				ea.db.SetTickState(e.Address, tick.Tick, tick)
-			}
-			ea.db.SetPoolHeight(e.Address, ticks.State.Height.Uint64())
+		pts, err := GetAndGet(ea.db, ea.cc, pair.Address)
+		if err != nil {
+			Log.Info("pool get error", zap.String("addr", e.Address.String()))
+			return err
 		}
 
-		h, _ := ea.db.GetPoolHeight(e.Address)
-		if h >= blockEvent.Height {
+		if pts.State.Height.Uint64() >= blockEvent.Height {
 			continue
 		}
 
@@ -117,7 +129,7 @@ func (ea *eventReactor) reactEvent(event *Event) error {
 		Log.Info("Burn Event", zap.String("addr", event.Address.String()))
 
 	case EventTypeSwap:
-		ea.db.SetCurrentTick(event.Address, int32(event.TickLower.Int64()))
+		ea.db.SetCurrentTick(event.Address, int32(event.Tick.Int64()))
 		Log.Info("Swap Event", zap.String("addr", event.Address.String()))
 
 	default:
