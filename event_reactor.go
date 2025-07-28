@@ -27,12 +27,41 @@ type EventReactor interface {
 }
 
 type eventReactor struct {
-	db Repo
-	wg *sync.WaitGroup
+	wg    *sync.WaitGroup
+	db    Repo
+	cache Cache
+	cc    *ContractCaller
 }
 
 func (ea *eventReactor) ReactBlockEvent(blockEvent *BlockEvent) error {
 	for _, e := range blockEvent.Events {
+		pair, ok := ea.cache.GetPair(e.Address)
+		if !ok {
+			return nil
+		}
+
+		if pair.Filtered {
+			return nil
+		}
+
+		if pair.ProtocolId != 3 {
+			return nil
+		}
+
+		ok, _ = ea.db.TickExists(e.Address)
+		if !ok {
+			ticks, err := ea.cc.CallGetAllTicks(e.Address)
+			if err != nil {
+				// TODO check
+				continue
+			}
+			ea.db.SetCurrentTick(e.Address, int32(ticks.State.Tick.Int64()))
+			ea.db.SetTickSpacing(e.Address, int32(ticks.State.Tick.Int64()))
+			for _, tick := range ticks.Ticks {
+				ea.db.SetTickState(e.Address, tick.Tick, tick)
+			}
+		}
+
 		if err := ea.reactEvent(e); err != nil {
 			return err
 		}
@@ -57,10 +86,12 @@ func (ea *eventReactor) shutdown() {
 	ea.wg.Done()
 }
 
-func NewEventReactor(db Repo, wg *sync.WaitGroup) EventReactor {
+func NewEventReactor(wg *sync.WaitGroup, db Repo, cache Cache, cc *ContractCaller) EventReactor {
 	return &eventReactor{
-		db: db,
-		wg: wg,
+		wg:    wg,
+		db:    db,
+		cache: cache,
+		cc:    cc,
 	}
 }
 

@@ -169,12 +169,19 @@ func (a *apiServerOnline) HandlerTicks2(w http.ResponseWriter, r *http.Request) 
 }
 
 func (a *apiServerOnline) HandlerTicks3(w http.ResponseWriter, r *http.Request) {
-	// 解析request,输出address,tickOffset
 	// 查询address是否初始化
 	// 如果没有初始化,调用CallGetAllTicks获取当前pool的所有tick信息并保存到db(包含tickSpacing),得到所有tick信息:ticks;同时event_reactor开始处理该address的事件,根据事件(Mint/Burn)更新tick状态,根据事件(Swap)更新currentTick(问题,获取到ticks信息的高度是H,此时主流程的高度已经处理到H+2,就会丢失2个区块的状态)
 	// 如果初始化,直接调用db的接口获取当前所有tick信息:ticks
 	// 到这里为止无论是否初始化最终都得到了池子的ticks
 	// 根据ticks,currentTick,TickSpacing计算深度并返回结果
+
+	// 抽象出一个函数:ParseRequest得到address,tickOffset
+	// 查询db:
+	/*
+		db需要存储的数据:
+		当前Tick(实时更新),TickSpacing(一次写入不可变)
+		各Tick具体状态{LiquidityNet}(实时更新)
+	*/
 }
 
 func (a *apiServerOnline) Start() {

@@ -10,7 +10,12 @@ type TickStateRepo interface {
 	SetTickState(address common.Address, tick int32, tickState *TickState) error
 	GetTickState(address common.Address, tick int32) (*TickState, error)
 	GetTickStates(address common.Address, tickLower, tickUpper int32) ([]*TickState, error)
-	GetAll() (map[common.Address][]*TickState, error) // for dev
+	GetAllTicks() (map[common.Address][]*TickState, error) // for dev
+	SetCurrentTick(address common.Address, currentTick int32) error
+	GetCurrentTick(address common.Address) (int32, error)
+	SetTickSpacing(address common.Address, tickSpacing int32) error
+	GetTickSpacing(address common.Address) (int32, error)
+	TickExists(address common.Address) (bool, error)
 }
 
 type HeightRepo interface {
@@ -126,7 +131,7 @@ func (r *repo) GetTickStates(addr common.Address, tickLower, tickUpper int32) ([
 	return EmptyTickStates, nil
 }
 
-func (r *repo) GetAll() (map[common.Address][]*TickState, error) {
+func (r *repo) GetAllTicks() (map[common.Address][]*TickState, error) {
 	return r.GetFromTo(MinKey.GetKey(), MaxKey.GetKey())
 }
 

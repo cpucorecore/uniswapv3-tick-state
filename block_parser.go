@@ -80,6 +80,8 @@ func ParseLog(log *types.Log) (*Event, error) {
 		return ParseMint(log)
 	case abi_instance.BurnTopic0:
 		return ParseBurn(log)
+	case abi_instance.SwapTopic0:
+		return ParseSwap(log)
 	default:
 		return nil, ErrUnknownLogTopic
 	}
@@ -112,6 +114,19 @@ func ParseBurn(log *types.Log) (*Event, error) {
 		TickLower: log.Topics[2].Big(),
 		TickUpper: log.Topics[3].Big(),
 		Amount:    input[0].(*big.Int),
+	}, nil
+}
+
+func ParseSwap(log *types.Log) (*Event, error) {
+	input, err := ParseInput(log)
+	if err != nil {
+		return nil, err
+	}
+
+	return &Event{
+		Address: log.Address,
+		Type:    EventTypeSwap,
+		Amount:  input[6].(*big.Int),
 	}, nil
 }
 
@@ -160,9 +175,17 @@ var (
 		ABIEvent:      abi_instance.BurnEvent,
 	}
 
+	SwapEventInputParser = &EventInputParser{
+		Topic0:        abi_instance.SwapTopic0,
+		TopicLen:      3,
+		DataUnpackLen: 7,
+		ABIEvent:      abi_instance.SwapEvent,
+	}
+
 	InputParserBook = map[common.Hash]*EventInputParser{
 		abi_instance.MintTopic0: MintEventInputParser,
 		abi_instance.BurnTopic0: BurnEventInputParser,
+		abi_instance.SwapTopic0: SwapEventInputParser,
 	}
 )
 

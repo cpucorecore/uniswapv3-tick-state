@@ -74,7 +74,7 @@ func (a *apiServer) HandlerTicks(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *apiServer) HandlerAll(w http.ResponseWriter, r *http.Request) {
-	states, err := a.db.GetAll()
+	states, err := a.db.GetAllTicks()
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte(fmt.Sprintf("get all tick states error: %v", err)))

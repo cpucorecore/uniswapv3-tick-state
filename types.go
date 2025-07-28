@@ -21,6 +21,7 @@ func (b *BlockReceipt) Sequence() uint64 {
 const (
 	EventTypeMint = iota + 1
 	EventTypeBurn
+	EventTypeSwap
 )
 
 type Event struct {
@@ -29,6 +30,7 @@ type Event struct {
 	TickLower *big.Int
 	TickUpper *big.Int
 	Amount    *big.Int
+	Tick      *big.Int
 }
 
 type BlockEvent struct {
