@@ -16,6 +16,8 @@ type TickStateRepo interface {
 	SetTickSpacing(address common.Address, tickSpacing int32) error
 	GetTickSpacing(address common.Address) (int32, error)
 	TickExists(address common.Address) (bool, error)
+	SetPoolHeight(address common.Address, height uint64) error
+	GetPoolHeight(address common.Address) (uint64, error)
 }
 
 type HeightRepo interface {

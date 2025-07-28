@@ -60,6 +60,12 @@ func (ea *eventReactor) ReactBlockEvent(blockEvent *BlockEvent) error {
 			for _, tick := range ticks.Ticks {
 				ea.db.SetTickState(e.Address, tick.Tick, tick)
 			}
+			ea.db.SetPoolHeight(e.Address, ticks.State.Height.Uint64())
+		}
+
+		h, _ := ea.db.GetPoolHeight(e.Address)
+		if h >= blockEvent.Height {
+			continue
 		}
 
 		if err := ea.reactEvent(e); err != nil {
@@ -104,6 +110,9 @@ func (ea *eventReactor) reactEvent(event *Event) error {
 	case EventTypeBurn:
 		ea.reactTick(event.Address, int32(event.TickLower.Int64()), new(big.Int).Neg(event.Amount))
 		ea.reactTick(event.Address, int32(event.TickUpper.Int64()), event.Amount)
+
+	case EventTypeSwap:
+		// TODO
 
 	default:
 		panic(fmt.Sprintf("wrong event: %v", event.Type))
