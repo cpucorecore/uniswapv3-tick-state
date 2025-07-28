@@ -21,6 +21,7 @@ type APIServerOnline interface {
 type apiServerOnline struct {
 	cc    *ContractCaller
 	cache Cache
+	db    Repo
 }
 
 const (
@@ -168,6 +169,21 @@ func (a *apiServerOnline) HandlerTicks2(w http.ResponseWriter, r *http.Request) 
 	w.Write([]byte(htmlStr))
 }
 
+func (a *apiServerOnline) GetAndGet(addr common.Address) (*PoolTicks, error) {
+	ok, err := a.db.PoolExists(addr)
+	if err != nil || !ok {
+		s, err := a.cc.CallGetAllTicks(addr)
+		if err != nil {
+			return nil, err
+		}
+
+		a.db.SetPoolState(addr, s)
+		return s, nil
+	}
+
+	return a.db.GetPoolState(addr)
+}
+
 func (a *apiServerOnline) HandlerTicks3(w http.ResponseWriter, r *http.Request) {
 	// 查询address是否初始化
 	// 如果没有初始化,调用CallGetAllTicks获取当前pool的所有tick信息并保存到db(包含tickSpacing),得到所有tick信息:ticks;同时event_reactor开始处理该address的事件,根据事件(Mint/Burn)更新tick状态,根据事件(Swap)更新currentTick(问题,获取到ticks信息的高度是H,此时主流程的高度已经处理到H+2,就会丢失2个区块的状态)
@@ -182,6 +198,70 @@ func (a *apiServerOnline) HandlerTicks3(w http.ResponseWriter, r *http.Request) 
 		当前Tick(实时更新),TickSpacing(一次写入不可变)
 		各Tick具体状态{LiquidityNet}(实时更新)
 	*/
+	addressStr := r.URL.Query().Get("address")
+	tickOffsetStr := r.URL.Query().Get("TickOffset")
+	if addressStr == "" || tickOffsetStr == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("missing address or TickOffset"))
+		return
+	}
+
+	address := common.HexToAddress(addressStr)
+	pair, ok := a.cache.GetPair(address)
+	if !ok {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("no pool info"))
+		return
+	}
+	if pair.Filtered {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("pool filtered"))
+		return
+	}
+
+	tickOffset, err := strconv.ParseInt(tickOffsetStr, 10, 32)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("invalid TickCount"))
+		return
+	}
+
+	now := time.Now()
+
+	ticks, err := a.GetAndGet(address)
+	Log.Info("CallGetAllTicks duration", zap.Any("ms", time.Since(now).Milliseconds()))
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(fmt.Sprintf("get tick states error: %v", err)))
+		return
+	}
+
+	token0, token1 := pair.Token0Core, pair.Token1Core
+	if pair.TokensReversed {
+		token0, token1 = pair.Token1Core, pair.Token0Core
+	}
+
+	currentTick := int32(ticks.State.Tick.Int64())
+	tickSpacing := int32(ticks.State.TickSpacing.Int64())
+	// 计算窗口
+	centerTick := (currentTick / tickSpacing) * tickSpacing
+	tickLower := centerTick - int32(tickOffset)*tickSpacing
+	tickUpper := centerTick + (int32(tickOffset)+1)*tickSpacing
+
+	now = time.Now()
+	amount, summary := CalcAmount(ticks.State, ticks.Ticks, tickLower, tickUpper, int(token0.Decimals), int(token1.Decimals))
+	Log.Info("CalcAmount duration", zap.Any("ms", time.Since(now).Milliseconds()))
+
+	now = time.Now()
+	htmlStr, err := RenderTickAmountCharts(amount, summary, currentTick, tickSpacing, token0.Symbol, token1.Symbol)
+	Log.Info("RenderTickAmountCharts duration", zap.Any("ms", time.Since(now).Milliseconds()))
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("render error"))
+		return
+	}
+	w.Header().Set("Content-Type", "text/html")
+	w.Write([]byte(htmlStr))
 }
 
 func (a *apiServerOnline) Start() {
@@ -196,11 +276,12 @@ func (a *apiServerOnline) Start() {
 	}()
 }
 
-func NewAPIServerOnline(url string, cache Cache) APIServer {
+func NewAPIServerOnline(url string, cache Cache, db Repo) APIServer {
 	cc := NewContractCaller(url)
 	return &apiServerOnline{
 		cc:    cc,
 		cache: cache,
+		db:    db,
 	}
 }
 

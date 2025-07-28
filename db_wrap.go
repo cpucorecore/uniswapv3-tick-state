@@ -11,13 +11,16 @@ type TickStateRepo interface {
 	GetTickState(address common.Address, tick int32) (*TickState, error)
 	GetTickStates(address common.Address, tickLower, tickUpper int32) ([]*TickState, error)
 	GetAllTicks() (map[common.Address][]*TickState, error) // for dev
+	GetPoolTicks(address common.Address) ([]*TickState, error)
 	SetCurrentTick(address common.Address, currentTick int32) error
 	GetCurrentTick(address common.Address) (int32, error)
 	SetTickSpacing(address common.Address, tickSpacing int32) error
 	GetTickSpacing(address common.Address) (int32, error)
-	TickExists(address common.Address) (bool, error)
+	PoolExists(address common.Address) (bool, error)
 	SetPoolHeight(address common.Address, height uint64) error
 	GetPoolHeight(address common.Address) (uint64, error)
+	GetPoolState(poolAddr common.Address) (*PoolTicks, error)
+	SetPoolState(poolAddr common.Address, poolTicks *PoolTicks) error
 }
 
 type HeightRepo interface {
@@ -137,7 +140,23 @@ func (r *repo) GetAllTicks() (map[common.Address][]*TickState, error) {
 	return r.GetFromTo(MinKey.GetKey(), MaxKey.GetKey())
 }
 
-var HeightKey = []byte("1")
+func (r *repo) GetPoolTicks(address common.Address) ([]*TickState, error) {
+	fk := GetTickStateKey(address, minTick)
+	tk := GetTickStateKey(address, maxTick)
+	tickStates, err := r.GetFromTo(fk.GetKey(), tk.GetKey())
+	if err != nil {
+		return nil, err
+	}
+
+	tickState, ok := tickStates[address]
+	if !ok {
+		return EmptyTickStates, nil
+	}
+
+	return tickState, nil
+}
+
+var HeightKey = []byte("1:")
 
 func (r *repo) SetHeight(height uint64) error {
 	var buf [8]byte
@@ -161,4 +180,168 @@ func (r *repo) GetHeight() (uint64, error) {
 
 	height := binary.BigEndian.Uint64(data)
 	return height, nil
+}
+
+var (
+	KeyPrefixCurrentTick = []byte("3:")
+	KeyPrefixTickSpacing = []byte("4:")
+	KeyPrefixPoolHeight  = []byte("5:")
+)
+
+func int32ToBytes(n int32) []byte {
+	buf := make([]byte, 4)
+	binary.BigEndian.PutUint32(buf, uint32(n))
+	return buf
+}
+
+func bytesToInt32(data []byte) int32 {
+	return int32(binary.BigEndian.Uint32(data))
+}
+
+func uint64ToBytes(n uint64) []byte {
+	buf := make([]byte, 8)
+	binary.BigEndian.PutUint64(buf, n)
+	return buf
+}
+
+func bytesToUint64(data []byte) uint64 {
+	return binary.BigEndian.Uint64(data)
+}
+
+func (r *repo) SetCurrentTick(address common.Address, currentTick int32) error {
+	var key [22]byte
+	copy(key[:2], KeyPrefixCurrentTick)
+	copy(key[2:22], address[:])
+
+	return r.db.Set(key[:], int32ToBytes(currentTick))
+}
+
+func (r *repo) GetCurrentTick(address common.Address) (int32, error) {
+	var key [22]byte
+	copy(key[:2], KeyPrefixCurrentTick)
+	copy(key[2:22], address[:])
+
+	bytes, err := r.db.Get(key[:])
+	if err != nil {
+		return 0, err
+	}
+
+	return bytesToInt32(bytes), nil
+}
+
+func (r *repo) SetTickSpacing(address common.Address, tickSpacing int32) error {
+	var key [22]byte
+	copy(key[:2], KeyPrefixTickSpacing)
+	copy(key[2:22], address[:])
+
+	return r.db.Set(key[:], int32ToBytes(tickSpacing))
+}
+
+func (r *repo) GetTickSpacing(address common.Address) (int32, error) {
+	var key [22]byte
+	copy(key[:2], KeyPrefixTickSpacing)
+	copy(key[2:22], address[:])
+
+	bytes, err := r.db.Get(key[:])
+	if err != nil {
+		return 0, err
+	}
+
+	return bytesToInt32(bytes), nil
+}
+
+func (r *repo) PoolExists(address common.Address) (bool, error) {
+	tickSpacing, err := r.GetTickSpacing(address)
+	if err != nil {
+		return false, err
+	}
+
+	return tickSpacing != 0, nil
+}
+
+func (r *repo) SetPoolHeight(address common.Address, height uint64) error {
+	var key [22]byte
+	copy(key[:2], KeyPrefixPoolHeight)
+	copy(key[2:22], address[:])
+
+	return r.db.Set(key[:], uint64ToBytes(height))
+}
+
+func (r *repo) GetPoolHeight(address common.Address) (uint64, error) {
+	var key [22]byte
+	copy(key[:2], KeyPrefixPoolHeight)
+	copy(key[2:22], address[:])
+
+	bytes, err := r.db.Get(key[:])
+	if err != nil {
+		return 0, err
+	}
+
+	return bytesToUint64(bytes), nil
+}
+
+func (r *repo) GetPoolState(poolAddr common.Address) (*PoolTicks, error) {
+	ok, err := r.PoolExists(poolAddr)
+	if err != nil {
+		return nil, err
+	}
+
+	if !ok {
+		return nil, nil // TODO check
+	}
+
+	height, err := r.GetPoolHeight(poolAddr)
+	if err != nil {
+		return nil, err
+	}
+
+	tickSpacing, err := r.GetTickSpacing(poolAddr)
+	if err != nil {
+		return nil, err
+	}
+
+	tick, err := r.GetCurrentTick(poolAddr)
+	if err != nil {
+		return nil, err
+	}
+
+	ticks, err := r.GetPoolTicks(poolAddr)
+	if err != nil {
+		return nil, err
+	}
+
+	return &PoolTicks{
+		State: &PoolState{
+			Height:      big.NewInt(int64(height)),
+			TickSpacing: big.NewInt(int64(tickSpacing)),
+			Tick:        big.NewInt(int64(tick)),
+		},
+		Ticks: ticks,
+	}, nil
+}
+
+func (r *repo) SetPoolState(poolAddr common.Address, poolTicks *PoolTicks) error {
+	// TODO mutex lock
+	err := r.SetPoolHeight(poolAddr, poolTicks.State.Height.Uint64())
+	if err != nil {
+		return err
+	}
+
+	err = r.SetCurrentTick(poolAddr, int32(poolTicks.State.Tick.Uint64()))
+	if err != nil {
+		return err
+	}
+
+	err = r.SetTickSpacing(poolAddr, int32(poolTicks.State.TickSpacing.Uint64()))
+	if err != nil {
+		return err
+	}
+	for _, ts := range poolTicks.Ticks {
+		err = r.SetTickState(poolAddr, int32(poolTicks.State.Tick.Uint64()), ts)
+		if err != nil {
+			return err
+		}
+	}
+	
+	return nil
 }

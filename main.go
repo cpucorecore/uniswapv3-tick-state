@@ -53,12 +53,12 @@ func main() {
 	})
 	cache := NewTwoTierCache(redisCli)
 
-	aso := NewAPIServerOnline(G.EthRPC.HTTP, cache)
+	aso := NewAPIServerOnline(G.EthRPC.HTTP, cache, dbWrap)
 	aso.Start()
 
 	wg := &sync.WaitGroup{}
 	wg.Add(1)
-	reactor := NewEventReactor(dbWrap, wg)
+	reactor := NewEventReactor(wg, dbWrap, cache, G.EthRPC.HTTP)
 	parser := NewBlockParser()
 	parser.MountOutput(reactor)
 
@@ -76,7 +76,7 @@ func main() {
 	crawler.Start(ctx)
 
 	dispatcher.MountOutput(crawler)
-	dispatcher.Start(ctx, fromHeight, false)
+	dispatcher.Start(ctx, fromHeight, true)
 
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)

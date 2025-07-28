@@ -48,7 +48,7 @@ func (ea *eventReactor) ReactBlockEvent(blockEvent *BlockEvent) error {
 			return nil
 		}
 
-		ok, _ = ea.db.TickExists(e.Address)
+		ok, _ = ea.db.PoolExists(e.Address)
 		if !ok {
 			ticks, err := ea.cc.CallGetAllTicks(e.Address)
 			if err != nil {
@@ -71,6 +71,8 @@ func (ea *eventReactor) ReactBlockEvent(blockEvent *BlockEvent) error {
 		if err := ea.reactEvent(e); err != nil {
 			return err
 		}
+
+		ea.db.SetPoolHeight(e.Address, blockEvent.Height) // TODO once per block
 	}
 	return ea.db.SetHeight(blockEvent.Height)
 }
@@ -92,7 +94,8 @@ func (ea *eventReactor) shutdown() {
 	ea.wg.Done()
 }
 
-func NewEventReactor(wg *sync.WaitGroup, db Repo, cache Cache, cc *ContractCaller) EventReactor {
+func NewEventReactor(wg *sync.WaitGroup, db Repo, cache Cache, url string) EventReactor {
+	cc := NewContractCaller(url)
 	return &eventReactor{
 		wg:    wg,
 		db:    db,
@@ -106,13 +109,16 @@ func (ea *eventReactor) reactEvent(event *Event) error {
 	case EventTypeMint:
 		ea.reactTick(event.Address, int32(event.TickLower.Int64()), event.Amount)
 		ea.reactTick(event.Address, int32(event.TickUpper.Int64()), new(big.Int).Neg(event.Amount))
+		Log.Info("Mint Event", zap.String("addr", event.Address.String()))
 
 	case EventTypeBurn:
 		ea.reactTick(event.Address, int32(event.TickLower.Int64()), new(big.Int).Neg(event.Amount))
 		ea.reactTick(event.Address, int32(event.TickUpper.Int64()), event.Amount)
+		Log.Info("Burn Event", zap.String("addr", event.Address.String()))
 
 	case EventTypeSwap:
-		// TODO
+		ea.db.SetCurrentTick(event.Address, int32(event.TickLower.Int64()))
+		Log.Info("Swap Event", zap.String("addr", event.Address.String()))
 
 	default:
 		panic(fmt.Sprintf("wrong event: %v", event.Type))
