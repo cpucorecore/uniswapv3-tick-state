@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
@@ -62,7 +63,7 @@ func (t *TickState) Equal(other *TickState) bool {
 	if other == nil {
 		return false
 	}
-	return t.LiquidityNet.Cmp(other.LiquidityNet) == 0
+	return t.Tick == other.Tick && t.LiquidityNet.Cmp(other.LiquidityNet) == 0
 }
 
 func (t *TickState) MarshalBinary() ([]byte, error) {
@@ -71,6 +72,23 @@ func (t *TickState) MarshalBinary() ([]byte, error) {
 
 func (t *TickState) UnmarshalBinary(data []byte) error {
 	return t.LiquidityNet.GobDecode(data)
+}
+
+type PoolGlobalState struct {
+	Height       *big.Int `json:"height"`
+	TickSpacing  *big.Int `json:"tickSpacing"`
+	Tick         *big.Int `json:"tick"`
+	Liquidity    *big.Int `json:"liquidity"`
+	SqrtPriceX96 *big.Int `json:"sqrtPriceX96"`
+}
+type PoolState struct {
+	GlobalState *PoolGlobalState
+	TickStates  []*TickState
+}
+
+func (s *PoolState) String() string {
+	bytes, _ := json.Marshal(s)
+	return string(bytes)
 }
 
 type CallContractReq struct {

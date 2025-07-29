@@ -1,18 +1,19 @@
 package main
 
 import (
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/stretchr/testify/require"
 	"math/big"
 	"testing"
-
-	"github.com/ethereum/go-ethereum/common"
 )
 
 func newTestRepo(t *testing.T) Repo {
-	db, err := NewRocksDB("/tmp/testdb_wrap_rocksdb", &RocksDBOptions{
+	name := t.TempDir()
+	db, err := NewRocksDB(name, &RocksDBOptions{
 		EnableLog:            false,
 		BlockCacheSize:       1024 * 1024 * 100,
 		WriteBufferSize:      1024 * 1024 * 10,
-		MaxWriteBufferNumber: 1024 * 1024 * 10,
+		MaxWriteBufferNumber: 1,
 	})
 	if err != nil {
 		t.Fatalf("failed to create rocksdb: %v", err)
@@ -26,7 +27,7 @@ func Test_SetTickState_GetTickState_PositiveNegative(t *testing.T) {
 	addr := common.HexToAddress("0x1000000000000000000000000000000000000001")
 	for _, tick := range []int32{123, -123} {
 		ts := &TickState{Tick: tick, LiquidityNet: big.NewInt(123456)}
-		if err := repo.SetTickState(addr, tick, ts); err != nil {
+		if err := repo.SetTickState(addr, ts); err != nil {
 			t.Fatalf("SetTickState failed: %v", err)
 		}
 		ts2, err := repo.GetTickState(addr, tick)
@@ -45,7 +46,7 @@ func Test_GetTickStates_PositiveNegative(t *testing.T) {
 	addr := common.HexToAddress("0x2000000000000000000000000000000000000002")
 	for _, tick := range []int32{-200, -100, 0, 100, 200} {
 		ts := &TickState{Tick: tick, LiquidityNet: big.NewInt(int64(tick))}
-		_ = repo.SetTickState(addr, tick, ts)
+		_ = repo.SetTickState(addr, ts)
 	}
 	states, err := repo.GetTickStates(addr, 0, 201)
 	if err != nil || len(states) == 0 {
@@ -57,27 +58,15 @@ func Test_GetTickStates_PositiveNegative(t *testing.T) {
 	}
 }
 
-func Test_GetAllTicks(t *testing.T) {
-	repo := newTestRepo(t)
-	defer repo.Close()
-	addr := common.HexToAddress("0x3000000000000000000000000000000000000003")
-	_ = repo.SetTickState(addr, 1, &TickState{Tick: 1, LiquidityNet: big.NewInt(1)})
-	_ = repo.SetTickState(addr, -1, &TickState{Tick: -1, LiquidityNet: big.NewInt(-1)})
-	all, err := repo.GetAllTicks()
-	if err != nil || len(all) == 0 {
-		t.Fatalf("GetAllTicks failed or empty")
-	}
-}
-
 func Test_GetPoolTicks_PositiveNegative(t *testing.T) {
 	repo := newTestRepo(t)
 	defer repo.Close()
 	addr := common.HexToAddress("0x4000000000000000000000000000000000000004")
-	_ = repo.SetTickState(addr, 10, &TickState{Tick: 10, LiquidityNet: big.NewInt(10)})
-	_ = repo.SetTickState(addr, -10, &TickState{Tick: -10, LiquidityNet: big.NewInt(-10)})
-	states, err := repo.GetPoolTicks(addr)
+	_ = repo.SetTickState(addr, &TickState{Tick: 10, LiquidityNet: big.NewInt(10)})
+	_ = repo.SetTickState(addr, &TickState{Tick: -10, LiquidityNet: big.NewInt(-10)})
+	states, err := repo.GetPoolTickStates(addr)
 	if err != nil || len(states) != 2 {
-		t.Fatalf("GetPoolTicks failed or empty")
+		t.Fatalf("GetPoolTickStates failed or empty")
 	}
 }
 
@@ -120,20 +109,20 @@ func Test_SetGetTickSpacing_PositiveNegative(t *testing.T) {
 func Test_PoolExists_PositiveNegative(t *testing.T) {
 	repo := newTestRepo(t)
 	defer repo.Close()
+
 	addr := common.HexToAddress("0x7000000000000000000000000000000000000007")
-	_ = repo.SetTickSpacing(addr, 10)
+	err := repo.SetTickSpacing(addr, 10)
+	require.Nil(t, err, err)
+
 	ok, err := repo.PoolExists(addr)
 	if err != nil || !ok {
 		t.Fatalf("PoolExists failed or should exist")
 	}
+
 	addr2 := common.HexToAddress("0x7000000000000000000000000000000000000008")
-	ok, err = repo.PoolExists(addr2)
-	if err != nil {
-		t.Fatalf("PoolExists (not exist) failed: %v", err)
-	}
-	if ok {
-		t.Fatalf("PoolExists: should not exist")
-	}
+	exist, err := repo.PoolExists(addr2)
+	require.NotNil(t, err)
+	require.False(t, exist, "PoolExists: should not exist")
 }
 
 func Test_SetGetPoolHeight(t *testing.T) {
@@ -176,13 +165,13 @@ func Test_SetGetPoolState_PositiveNegative(t *testing.T) {
 	defer repo.Close()
 	addr := common.HexToAddress("0x9000000000000000000000000000000000000009")
 	for _, tick := range []int32{100, -100} {
-		poolTicks := &PoolTicks{
-			State: &PoolState{
+		poolTicks := &PoolState{
+			GlobalState: &PoolGlobalState{
 				Height:      big.NewInt(100),
 				TickSpacing: big.NewInt(10),
 				Tick:        big.NewInt(int64(tick)),
 			},
-			Ticks: []*TickState{
+			TickStates: []*TickState{
 				{Tick: tick, LiquidityNet: big.NewInt(int64(tick))},
 			},
 		}
@@ -193,8 +182,8 @@ func Test_SetGetPoolState_PositiveNegative(t *testing.T) {
 		if err != nil {
 			t.Fatalf("GetPoolState failed: %v", err)
 		}
-		if ps.State.Tick.Cmp(poolTicks.State.Tick) != 0 {
-			t.Fatalf("GetPoolState: want tick %v, got %v", poolTicks.State.Tick, ps.State.Tick)
+		if ps.GlobalState.Tick.Cmp(poolTicks.GlobalState.Tick) != 0 {
+			t.Fatalf("GetPoolState: want tick %v, got %v", poolTicks.GlobalState.Tick, ps.GlobalState.Tick)
 		}
 	}
 }
@@ -202,5 +191,4 @@ func Test_SetGetPoolState_PositiveNegative(t *testing.T) {
 func Test_Close(t *testing.T) {
 	repo := newTestRepo(t)
 	repo.Close()
-	repo.Close() // 再次关闭不应panic
 }

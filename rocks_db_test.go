@@ -64,7 +64,7 @@ func TestGetSetTick(t *testing.T) {
 
 	addr := common.HexToAddress("0xffff")
 	tick := int32(0)
-	require.NoError(t, dbw.SetTickState(addr, tick, testTick))
+	require.NoError(t, dbw.SetTickState(addr, testTick))
 
 	retrievedTick, err := dbw.GetTickState(addr, tick)
 	require.NoError(t, err)
@@ -72,14 +72,13 @@ func TestGetSetTick(t *testing.T) {
 }
 
 func TestGetTicks(t *testing.T) {
-	dir := t.TempDir()
-	dbPath := filepath.Join(dir, "testdb")
 	opts := &RocksDBOptions{
-		BlockCacheSize:       8 * 1024 * 1024, // 8MB
-		WriteBufferSize:      4 * 1024 * 1024, // 4MB
+		BlockCacheSize:       8 * 1024 * 1024,
+		WriteBufferSize:      4 * 1024 * 1024,
 		MaxWriteBufferNumber: 2,
 	}
-	db, err := NewRocksDB(dbPath, opts)
+	name := t.TempDir()
+	db, err := NewRocksDB(name, opts)
 	if err != nil {
 		t.Fatalf("failed to create RocksDB: %v", err)
 	}
@@ -95,19 +94,18 @@ func TestGetTicks(t *testing.T) {
 	t3 := int32(3)
 
 	tickTests := []struct {
-		tick            int32
 		tickState       *TickState
 		expectTickState *TickState
 	}{
-		{tick: t1, tickState: &TickState{LiquidityNet: big.NewInt(1)}, expectTickState: &TickState{LiquidityNet: big.NewInt(-2)}},
-		{tick: t3, tickState: &TickState{LiquidityNet: big.NewInt(3)}, expectTickState: &TickState{LiquidityNet: big.NewInt(-1)}},
-		{tick: t2, tickState: &TickState{LiquidityNet: big.NewInt(2)}, expectTickState: &TickState{LiquidityNet: big.NewInt(1)}},
-		{tick: tn2, tickState: &TickState{LiquidityNet: big.NewInt(-2)}, expectTickState: &TickState{LiquidityNet: big.NewInt(2)}},
-		{tick: tn1, tickState: &TickState{LiquidityNet: big.NewInt(-1)}, expectTickState: &TickState{LiquidityNet: big.NewInt(3)}},
+		{tickState: &TickState{Tick: t1, LiquidityNet: big.NewInt(100)}, expectTickState: &TickState{Tick: tn2, LiquidityNet: big.NewInt(-200)}},
+		{tickState: &TickState{Tick: t3, LiquidityNet: big.NewInt(300)}, expectTickState: &TickState{Tick: tn1, LiquidityNet: big.NewInt(-100)}},
+		{tickState: &TickState{Tick: t2, LiquidityNet: big.NewInt(200)}, expectTickState: &TickState{Tick: t1, LiquidityNet: big.NewInt(100)}},
+		{tickState: &TickState{Tick: tn2, LiquidityNet: big.NewInt(-200)}, expectTickState: &TickState{Tick: t2, LiquidityNet: big.NewInt(200)}},
+		{tickState: &TickState{Tick: tn1, LiquidityNet: big.NewInt(-100)}, expectTickState: &TickState{Tick: t3, LiquidityNet: big.NewInt(300)}},
 	}
 
 	for _, tickTest := range tickTests {
-		err = r.SetTickState(addr, tickTest.tick, tickTest.tickState)
+		err = r.SetTickState(addr, tickTest.tickState)
 		require.NoError(t, err)
 	}
 

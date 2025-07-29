@@ -32,7 +32,7 @@ func main() {
 	for ; it.Valid(); it.Next() {
 		key := it.Key().Data()
 		val := it.Value().Data()
-		fmt.Printf("key: %s\nvalue: %s\n\n", hex.EncodeToString(key), hex.EncodeToString(val))
+		fmt.Printf("%s:%s\n", hex.EncodeToString(key), hex.EncodeToString(val))
 		it.Key().Free()
 		it.Value().Free()
 	}

@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/avast/retry-go/v4"
@@ -75,37 +74,11 @@ var (
 	getAllTicksMethod = abi_instance.LensABI.Methods["getAllTicks"]
 )
 
-type PoolState struct {
-	Height       *big.Int `json:"height"`
-	TickSpacing  *big.Int `json:"tickSpacing"`
-	Tick         *big.Int `json:"tick"`
-	Liquidity    *big.Int `json:"liquidity"`
-	SqrtPriceX96 *big.Int `json:"sqrtPriceX96"`
-}
-type PoolTicks struct {
-	State *PoolState
-	Ticks []*TickState
-}
-
-func (ts *PoolTicks) String() string {
-	bytes, err := json.Marshal(ts)
-	if err != nil {
-		panic(err)
-	}
-	return string(bytes)
-}
-
 var (
 	ErrEmptyOutput = errors.New("empty output")
 )
 
-type Tick struct {
-	Index          *big.Int
-	LiquidityGross *big.Int
-	LiquidityNet   *big.Int
-}
-
-func (c *ContractCaller) CallGetAllTicks(poolAddr common.Address) (*PoolTicks, error) {
+func (c *ContractCaller) GetPoolState(poolAddr common.Address) (*PoolState, error) {
 	data, err := abi_instance.LensABI.Pack("getAllTicks", poolAddr)
 	if err != nil {
 		return nil, err
@@ -116,7 +89,7 @@ func (c *ContractCaller) CallGetAllTicks(poolAddr common.Address) (*PoolTicks, e
 		Data:    data,
 	}
 
-	Log.Info(fmt.Sprintf("Calling GetAllTicks: %s", req))
+	Log.Info(fmt.Sprintf("Calling getAllTicks: %s", req))
 	bytes, err := c.CallContract(context.Background(), req)
 	if err != nil {
 		return nil, err
@@ -153,16 +126,14 @@ func (c *ContractCaller) CallGetAllTicks(poolAddr common.Address) (*PoolTicks, e
 		})
 	}
 
-	poolTicks := &PoolTicks{
-		State: &PoolState{
+	return &PoolState{
+		GlobalState: &PoolGlobalState{
 			Height:       poolState.Height,
 			TickSpacing:  poolState.TickSpacing,
 			Tick:         poolState.Tick,
 			Liquidity:    poolState.Liquidity,
 			SqrtPriceX96: poolState.SqrtPriceX96,
 		},
-		Ticks: tickStates,
-	}
-
-	return poolTicks, nil
+		TickStates: tickStates,
+	}, nil
 }

@@ -9,18 +9,6 @@ import (
 	"sync"
 )
 
-/*
-EventReactor
-BlockEvent enter this reactor, for every event, it will act as:
-
-	if Event.Type == EventTypeMint {
-		tick[TickLower] += Amount
-		tick[TickUpper] -= Amount
-	} else if Event.Type == EventTypeBurn {
-		tick[TickLower] -= Amount
-		tick[TickUpper] += Amount
-	}
-*/
 type EventReactor interface {
 	ReactBlockEvent(event *BlockEvent) error
 	Output[*BlockEvent]
@@ -31,25 +19,6 @@ type eventReactor struct {
 	db    Repo
 	cache Cache
 	cc    *ContractCaller
-}
-
-func GetAndGet(db Repo, cc *ContractCaller, addr common.Address) (*PoolTicks, error) {
-	ok, err := db.PoolExists(addr)
-	if err != nil || !ok {
-		s, err := cc.CallGetAllTicks(addr)
-		if err != nil {
-			return nil, err
-		}
-
-		err = db.SetPoolState(addr, s)
-		if err != nil {
-			return nil, err
-		}
-
-		return s, nil
-	}
-
-	return db.GetPoolState(addr)
 }
 
 func (ea *eventReactor) ReactBlockEvent(blockEvent *BlockEvent) error {
@@ -70,13 +39,13 @@ func (ea *eventReactor) ReactBlockEvent(blockEvent *BlockEvent) error {
 			return nil
 		}
 
-		pts, err := GetAndGet(ea.db, ea.cc, pair.Address)
+		pts, err := GetPoolStateFromDBOrContractCaller(ea.db, ea.cc, pair.Address)
 		if err != nil {
 			Log.Info("pool get error", zap.String("addr", e.Address.String()))
 			return err
 		}
 
-		if pts.State.Height.Uint64() >= blockEvent.Height {
+		if pts.GlobalState.Height.Uint64() >= blockEvent.Height {
 			continue
 		}
 
@@ -146,7 +115,7 @@ func IsNotExist(err error) bool {
 func (ea *eventReactor) reactTick(addr common.Address, tick int32, amount *big.Int) error {
 	tickState := ea.getOrNewTickState(addr, tick)
 	tickState.AddLiquidity(amount)
-	return ea.db.SetTickState(addr, tick, tickState)
+	return ea.db.SetTickState(addr, tickState)
 }
 
 func (ea *eventReactor) getOrNewTickState(addr common.Address, tick int32) *TickState {

@@ -63,13 +63,13 @@ func orderedBytesToInt32(b []byte) int32 {
 }
 
 const (
-	minTick = int32(-8388608) // int24
-	maxTick = int32(8388607)  // int24
+	MinInt24 = int32(-8388608) // int24
+	MaxInt24 = int32(8388607)  // int24
 )
 
 var (
 	minAddr = common.Address{}
 	maxAddr = common.HexToAddress("0xffffffffffffffffffffffffffffffffffffffff")
-	MinKey  = GetTickStateKey(minAddr, minTick)
-	MaxKey  = GetTickStateKey(maxAddr, maxTick)
+	MinKey  = GetTickStateKey(minAddr, MinInt24)
+	MaxKey  = GetTickStateKey(maxAddr, MaxInt24)
 )

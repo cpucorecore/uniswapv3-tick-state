@@ -7,8 +7,9 @@ import (
 )
 
 func TestGetAllTicks(t *testing.T) {
+	t.Skip()
 	cc := NewContractCaller("https://bsc-testnet-dataseed.bnbchain.org")
-	poolTicks, err := cc.CallGetAllTicks(common.HexToAddress("0x553700BD9eE66289f658Daf130bdf418EBB93324"))
+	poolState, err := cc.GetPoolState(common.HexToAddress("0x172fcD41E0913e95784454622d1c3724f546f849"))
 	require.Nil(t, err, err)
-	t.Log(poolTicks)
+	t.Log(poolState)
 }

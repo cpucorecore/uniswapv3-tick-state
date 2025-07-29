@@ -43,9 +43,6 @@ func main() {
 	}
 	dbWrap := NewRepo(rocksDB)
 
-	as := NewAPIServer(dbWrap)
-	as.Start()
-
 	redisCli := redis.NewClient(&redis.Options{
 		Addr:     G.Redis.Addr,
 		Username: G.Redis.Username,
@@ -53,7 +50,7 @@ func main() {
 	})
 	cache := NewTwoTierCache(redisCli)
 
-	aso := NewAPIServerOnline(G.EthRPC.HTTP, cache, dbWrap)
+	aso := NewAPIServer(G.EthRPC.HTTP, cache, dbWrap)
 	aso.Start()
 
 	wg := &sync.WaitGroup{}

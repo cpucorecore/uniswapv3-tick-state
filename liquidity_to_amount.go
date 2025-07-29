@@ -13,30 +13,27 @@ type TickAmount struct {
 	Amount1   *big.Float
 }
 
-func CalcAmount(poolState *PoolState, ticks []*TickState, tickLower, tickUpper int32, token0Decimals, token1Decimals int) ([]TickAmount, []TickAmount) {
-	allDetails := []TickAmount{}
-	if len(ticks) == 0 {
+func CalcAmount(tickStates []*TickState, tickSpacing int32, tickLower, tickUpper int32, token0Decimals, token1Decimals int) ([]TickAmount, []TickAmount) {
+	var allDetails []TickAmount
+	if len(tickStates) == 0 {
 		return allDetails, nil
 	}
 
-	// ticks 已经排序，无需再排序
 	// 构建所有tick边界
-	tickBoundaries := make([]int32, len(ticks))
-	for i, t := range ticks {
+	tickBoundaries := make([]int32, len(tickStates))
+	for i, t := range tickStates {
 		tickBoundaries[i] = t.Tick
 	}
 
 	// 计算每个tick区间的liquidity前缀和
-	prefixLiquidity := make([]*big.Int, len(ticks))
+	prefixLiquidity := make([]*big.Int, len(tickStates))
 	currentLiquidity := big.NewInt(0)
-	for i, t := range ticks {
+	for i, t := range tickStates {
 		currentLiquidity = new(big.Int).Add(currentLiquidity, t.LiquidityNet)
 		prefixLiquidity[i] = new(big.Int).Set(currentLiquidity)
 	}
 
-	tickSpacing := int(poolState.TickSpacing.Int64())
-
-	summary := []TickAmount{}
+	var summary []TickAmount
 	for i := 0; i < len(tickBoundaries)-1; i++ {
 		segLower := tickBoundaries[i]
 		segUpper := tickBoundaries[i+1]
@@ -74,7 +71,7 @@ func CalcAmount(poolState *PoolState, ticks []*TickState, tickLower, tickUpper i
 func CalcAmountInRange(
 	tickLower, tickUpper int32,
 	liquidity *big.Int,
-	tickSpacing, token0Decimals, token1Decimals int,
+	tickSpacing int32, token0Decimals, token1Decimals int,
 ) (amount0Sum, amount1Sum *big.Float, details []TickAmount) {
 	Q96 := new(big.Float).SetInt(new(big.Int).Lsh(big.NewInt(1), 96))
 	pow10Token0 := new(big.Float).SetFloat64(math.Pow10(token0Decimals))
@@ -85,9 +82,9 @@ func CalcAmountInRange(
 	details = []TickAmount{}
 
 	liqF := new(big.Float).SetInt(liquidity)
-	for t := tickLower; t < tickUpper; t += int32(tickSpacing) {
+	for t := tickLower; t < tickUpper; t += tickSpacing {
 		tickA := t
-		tickB := t + int32(tickSpacing)
+		tickB := t + tickSpacing
 
 		sqrtA := new(big.Float).Mul(
 			new(big.Float).SetFloat64(math.Pow(1.0001, float64(tickA)/2)), Q96)
