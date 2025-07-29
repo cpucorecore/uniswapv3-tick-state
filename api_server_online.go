@@ -50,7 +50,7 @@ func parseParams(r *http.Request, requiredParams []string) (map[string]string, *
 	return params, nil
 }
 
-func transferParams(params map[string]string) (common.Address, int32, *ParseError) {
+func convertParams(params map[string]string) (common.Address, int32, *ParseError) {
 	addressStr, ok := params["address"]
 	if !ok {
 		return common.Address{}, 0, &ParseError{
@@ -60,35 +60,35 @@ func transferParams(params map[string]string) (common.Address, int32, *ParseErro
 	}
 	address := common.HexToAddress(addressStr)
 
-	tickOffsetStr, ok := params["TickOffset"]
+	tickOffsetStr, ok := params["tick_offset"]
 	if !ok {
 		return common.Address{}, 0, &ParseError{
 			Code:    http.StatusBadRequest,
-			Message: "missing TickOffset parameter",
+			Message: "missing tick_offset parameter",
 		}
 	}
 	tickOffset, err := strconv.ParseInt(tickOffsetStr, 10, 32)
 	if err != nil {
 		return common.Address{}, 0, &ParseError{
 			Code:    http.StatusBadRequest,
-			Message: "invalid TickOffset format",
+			Message: "invalid tick_offset format",
 		}
 	}
 
 	return address, int32(tickOffset), nil
 }
 
-func (a *apiServer) parseTicks3Params(r *http.Request) (common.Address, int32, *ParseError) {
-	params, parseErr := parseParams(r, []string{"address", "TickOffset"})
+func (a *apiServer) parsePoolStateParams(r *http.Request) (common.Address, int32, *ParseError) {
+	params, parseErr := parseParams(r, []string{"address", "tick_offset"})
 	if parseErr != nil {
 		return common.Address{}, 0, parseErr
 	}
 
-	return transferParams(params)
+	return convertParams(params)
 }
 
-func (a *apiServer) HandlerTicks3(w http.ResponseWriter, r *http.Request) {
-	address, tickOffset, parseErr := a.parseTicks3Params(r)
+func (a *apiServer) HandlerPoolState(w http.ResponseWriter, r *http.Request) {
+	address, tickOffset, parseErr := a.parsePoolStateParams(r)
 	if parseErr != nil {
 		w.WriteHeader(parseErr.Code)
 		w.Write([]byte(parseErr.Message))
@@ -144,8 +144,8 @@ func (a *apiServer) HandlerTicks3(w http.ResponseWriter, r *http.Request) {
 
 func (a *apiServer) Start() {
 	go func() {
-		http.HandleFunc("/online/ticks3", a.HandlerTicks3)
-		err := http.ListenAndServe(":39999", nil)
+		http.HandleFunc("/pool_state", a.HandlerPoolState)
+		err := http.ListenAndServe(":29292", nil)
 		if err != nil {
 			panic(err)
 		}
