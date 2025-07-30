@@ -127,7 +127,7 @@ func (c *ContractCaller) GetPoolState(poolAddr common.Address) (*PoolState, erro
 	}
 
 	return &PoolState{
-		GlobalState: &PoolGlobalState{
+		Global: &PoolGlobalState{
 			Height:       poolState.Height,
 			TickSpacing:  poolState.TickSpacing,
 			Tick:         poolState.Tick,

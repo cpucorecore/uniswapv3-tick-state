@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-func newTestRepo(t *testing.T) Repo {
+func newTestRepo(t *testing.T) DB {
 	name := t.TempDir()
 	db, err := NewRocksDB(name, &RocksDBOptions{
 		EnableLog:            false,
@@ -18,7 +18,7 @@ func newTestRepo(t *testing.T) Repo {
 	if err != nil {
 		t.Fatalf("failed to create rocksdb: %v", err)
 	}
-	return NewRepo(db)
+	return NewDB(db)
 }
 
 func Test_SetTickState_GetTickState_PositiveNegative(t *testing.T) {
@@ -115,13 +115,12 @@ func Test_PoolExists_PositiveNegative(t *testing.T) {
 	require.Nil(t, err, err)
 
 	ok, err := repo.PoolExists(addr)
-	if err != nil || !ok {
-		t.Fatalf("PoolExists failed or should exist")
-	}
+	require.Nil(t, err, err)
+	require.True(t, ok, "PoolExists: should exist")
 
 	addr2 := common.HexToAddress("0x7000000000000000000000000000000000000008")
 	exist, err := repo.PoolExists(addr2)
-	require.NotNil(t, err)
+	require.Nil(t, err)
 	require.False(t, exist, "PoolExists: should not exist")
 }
 
@@ -166,7 +165,7 @@ func Test_SetGetPoolState_PositiveNegative(t *testing.T) {
 	addr := common.HexToAddress("0x9000000000000000000000000000000000000009")
 	for _, tick := range []int32{100, -100} {
 		poolTicks := &PoolState{
-			GlobalState: &PoolGlobalState{
+			Global: &PoolGlobalState{
 				Height:      big.NewInt(100),
 				TickSpacing: big.NewInt(10),
 				Tick:        big.NewInt(int64(tick)),
@@ -182,8 +181,8 @@ func Test_SetGetPoolState_PositiveNegative(t *testing.T) {
 		if err != nil {
 			t.Fatalf("GetPoolState failed: %v", err)
 		}
-		if ps.GlobalState.Tick.Cmp(poolTicks.GlobalState.Tick) != 0 {
-			t.Fatalf("GetPoolState: want tick %v, got %v", poolTicks.GlobalState.Tick, ps.GlobalState.Tick)
+		if ps.Global.Tick.Cmp(poolTicks.Global.Tick) != 0 {
+			t.Fatalf("GetPoolState: want tick %v, got %v", poolTicks.Global.Tick, ps.Global.Tick)
 		}
 	}
 }

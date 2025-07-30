@@ -3,15 +3,13 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"github.com/ethereum/go-ethereum/common"
 	"html/template"
 	"math"
 	"net/http"
 	"strconv"
-	"time"
-
-	"github.com/ethereum/go-ethereum/common"
-	"go.uber.org/zap"
 )
 
 const (
@@ -24,26 +22,16 @@ type APIServer interface {
 }
 
 type apiServer struct {
-	cc    *ContractCaller
-	cache Cache
-	db    Repo
+	poolStateGetter PoolStateGetter
 }
 
-type ParseError struct {
-	Code    int
-	Message string
-}
-
-func parseParams(r *http.Request, requiredParams []string) (map[string]string, *ParseError) {
+func parseParams(r *http.Request, requiredParams []string) (map[string]string, error) {
 	params := make(map[string]string)
 
 	for _, param := range requiredParams {
 		value := r.URL.Query().Get(param)
 		if value == "" {
-			return nil, &ParseError{
-				Code:    http.StatusBadRequest,
-				Message: fmt.Sprintf("missing parameter: %s", param),
-			}
+			return nil, errors.New(param + " is required")
 		}
 		params[param] = value
 	}
@@ -51,98 +39,117 @@ func parseParams(r *http.Request, requiredParams []string) (map[string]string, *
 	return params, nil
 }
 
-func convertParams(params map[string]string) (common.Address, int32, *ParseError) {
-	addressStr, ok := params["address"]
-	if !ok {
-		return common.Address{}, 0, &ParseError{
-			Code:    http.StatusBadRequest,
-			Message: "missing address parameter",
-		}
-	}
-	address := common.HexToAddress(addressStr)
-
-	tickOffsetStr, ok := params["tick_offset"]
-	if !ok {
-		return common.Address{}, 0, &ParseError{
-			Code:    http.StatusBadRequest,
-			Message: "missing tick_offset parameter",
-		}
-	}
-	tickOffset, err := strconv.ParseInt(tickOffsetStr, 10, 32)
-	if err != nil {
-		return common.Address{}, 0, &ParseError{
-			Code:    http.StatusBadRequest,
-			Message: "invalid tick_offset format",
-		}
-	}
-
-	return address, int32(tickOffset), nil
+type PoolStateParams struct {
+	Address    common.Address `json:"address"`
+	TickOffset uint64         `json:"tick_offset"`
+	Type       string         `json:"type"`
+	Format     string         `json:"format"`
 }
 
-func (a *apiServer) parsePoolStateParams(r *http.Request) (common.Address, int32, *ParseError) {
-	params, parseErr := parseParams(r, []string{"address", "tick_offset"})
-	if parseErr != nil {
-		return common.Address{}, 0, parseErr
+const (
+	ParamAddress    = "address"
+	ParamTickOffset = "tick_offset"
+	ParamType       = "type"
+	ParamFormat     = "format"
+)
+
+const (
+	ParamTypeLiquidity         = "liquidity"
+	ParamTypeTokenAmount       = "token_amount"
+	ParamTypeTokenAmountDetail = "token_amount_detail"
+)
+
+var (
+	ParamList = []string{
+		ParamAddress,
+		ParamTickOffset,
+		ParamType,
+		ParamFormat,
+	}
+)
+
+func FromHttpRequest(r *http.Request) (*PoolStateParams, error) {
+	kv, err := parseParams(r, ParamList)
+	if err != nil {
+		return nil, err
 	}
 
-	return convertParams(params)
+	tickOffset, err := strconv.ParseUint(kv[ParamTickOffset], 10, 32)
+	if err != nil {
+		return nil, err
+	}
+
+	p := &PoolStateParams{
+		Address:    common.HexToAddress(kv[ParamAddress]),
+		TickOffset: tickOffset,
+		Type:       kv[ParamType],
+		Format:     kv[ParamFormat],
+	}
+	p.arrange()
+	return p, nil
+}
+
+func (p *PoolStateParams) arrange() {
+	if p.Type != ParamTypeLiquidity && p.Type != ParamTypeTokenAmount && p.Type != ParamTypeTokenAmountDetail {
+		p.Type = ParamTypeLiquidity
+	}
+	if p.Format != "json" && p.Format != "html" {
+		p.Format = "json"
+	}
+	if p.Type == ParamTypeLiquidity {
+		p.Format = "json"
+	}
+	if p.TickOffset == 0 {
+		p.TickOffset = 10
+	}
 }
 
 func (a *apiServer) HandlerPoolState(w http.ResponseWriter, r *http.Request) {
-	address, tickOffset, parseErr := a.parsePoolStateParams(r)
-	if parseErr != nil {
-		w.WriteHeader(parseErr.Code)
-		w.Write([]byte(parseErr.Message))
-		return
-	}
-
-	pair, ok := a.cache.GetPair(address)
-	if !ok {
+	params, err := FromHttpRequest(r)
+	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("no pool info"))
+		w.Write([]byte(fmt.Sprintf("wrong request params: %v", err)))
 		return
 	}
 
-	if pair.Filtered {
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("pool filtered"))
-		return
-	}
-
-	poolState, err := GetPoolStateFromDBOrContractCaller(a.db, a.cc, address)
+	poolState, err := a.poolStateGetter.GetPoolState(params.Address)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte(fmt.Sprintf("get tick states error: %v", err)))
+		w.Write([]byte(fmt.Sprintf("get pool states error: %v", err)))
 		return
 	}
 	Log.Info(fmt.Sprintf("get pool states: %s", poolState))
 
-	token0, token1 := pair.Token0Core, pair.Token1Core
-	if pair.TokensReversed {
-		token0, token1 = pair.Token1Core, pair.Token0Core
-	}
-
-	currentTick := int32(poolState.GlobalState.Tick.Int64())
-	tickSpacing := int32(poolState.GlobalState.TickSpacing.Int64())
-	centerTick := (currentTick / tickSpacing) * tickSpacing
-	tickLower := centerTick - tickOffset*tickSpacing
-	tickUpper := centerTick + (tickOffset+1)*tickSpacing
-
-	now := time.Now()
-	rangeLiquidityArray := BuildRangeLiquidityArray(poolState.TickStates)
-	rangeAmountArray := CalcRangeAmountArray(rangeLiquidityArray, tickLower, tickUpper, int(token0.Decimals), int(token1.Decimals))
-	Log.Info("CalcAmount duration", zap.Any("ms", time.Since(now).Milliseconds()))
-
-	now = time.Now()
-	htmlStr, err := RenderRangeAmountArrayChart(rangeAmountArray, currentTick, tickSpacing, token0.Symbol, token1.Symbol)
-	Log.Info("RenderRangeAmountArrayChart duration", zap.Any("ms", time.Since(now).Milliseconds()))
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("render error"))
+	switch params.Type {
+	case ParamTypeLiquidity:
+		w.Header().Add("Content-Type", "application/json")
+		w.Write(poolState.Json())
 		return
+
+	case ParamTypeTokenAmount, ParamTypeTokenAmountDetail:
+		rangeLiquidityArray := BuildRangeLiquidityArray(poolState.TickStates)
+		if params.Type == ParamTypeTokenAmountDetail {
+			rangeLiquidityArray = SplitRangeLiquidityArray(rangeLiquidityArray, int32(poolState.Global.TickSpacing.Int64()))
+		}
+		rangeAmountArray := CalcRangeAmountArray(rangeLiquidityArray, int32(poolState.Global.Tick.Int64()), int32(poolState.Global.TickSpacing.Int64()), int(poolState.Token0.Decimals), int(poolState.Token1.Decimals))
+		if params.Format == "json" {
+			w.Header().Set("Content-Type", "application/json")
+			jsonData, _ := json.Marshal(rangeAmountArray)
+			w.Write(jsonData)
+			return
+		} else {
+			htmlStr, err := RenderRangeAmountArrayChart(rangeAmountArray, int32(poolState.Global.Tick.Int64()), int32(poolState.Global.TickSpacing.Int64()), poolState.Token0.Symbol, poolState.Token1.Symbol)
+			if err != nil {
+				w.WriteHeader(http.StatusInternalServerError)
+				w.Write([]byte("render error"))
+				return
+			}
+			w.Header().Set("Content-Type", "text/html")
+			w.Write([]byte(htmlStr))
+			return
+		}
+
 	}
-	w.Header().Set("Content-Type", "text/html")
-	w.Write([]byte(htmlStr))
 }
 
 func (a *apiServer) Start() {
@@ -155,12 +162,9 @@ func (a *apiServer) Start() {
 	}()
 }
 
-func NewAPIServer(url string, cache Cache, db Repo) APIServer {
-	cc := NewContractCaller(url)
+func NewAPIServer(poolStateGetter PoolStateGetter) APIServer {
 	return &apiServer{
-		cc:    cc,
-		cache: cache,
-		db:    db,
+		poolStateGetter: poolStateGetter,
 	}
 }
 

@@ -2,11 +2,12 @@ package main
 
 import (
 	"encoding/binary"
+	"errors"
 	"github.com/ethereum/go-ethereum/common"
 	"math/big"
 )
 
-type TickStateRepo interface {
+type TickStateDB interface {
 	SetTickState(address common.Address, tickState *TickState) error
 	GetTickState(address common.Address, tick int32) (*TickState, error)
 	GetTickStates(address common.Address, tickLower, tickUpper int32) ([]*TickState, error)
@@ -22,32 +23,32 @@ type TickStateRepo interface {
 	SetPoolState(poolAddr common.Address, poolTicks *PoolState) error
 }
 
-type HeightRepo interface {
+type HeightDB interface {
 	SetHeight(height uint64) error
 	GetHeight() (uint64, error)
 }
 
-type Repo interface {
-	TickStateRepo
-	HeightRepo
+type DB interface {
+	TickStateDB
+	HeightDB
 	Close()
 }
 
-type repo struct {
+type rocksDBWrap struct {
 	db *RocksDB
 }
 
-func (r *repo) Close() {
+func (r *rocksDBWrap) Close() {
 	r.db.Close()
 }
 
-func NewRepo(db *RocksDB) Repo {
-	return &repo{
+func NewDB(db *RocksDB) DB {
+	return &rocksDBWrap{
 		db: db,
 	}
 }
 
-func (r *repo) SetTickState(addr common.Address, tickState *TickState) error {
+func (r *rocksDBWrap) SetTickState(addr common.Address, tickState *TickState) error {
 	key := GetTickStateKey(addr, tickState.Tick).GetKey()
 	value, err := tickState.MarshalBinary()
 	if err != nil {
@@ -62,7 +63,7 @@ var (
 	}
 )
 
-func (r *repo) GetTickState(addr common.Address, tick int32) (*TickState, error) {
+func (r *rocksDBWrap) GetTickState(addr common.Address, tick int32) (*TickState, error) {
 	key := GetTickStateKey(addr, tick).GetKey()
 	bytes, err := r.db.Get(key)
 	if err != nil {
@@ -101,7 +102,7 @@ func (c *TickStateCollector) Get() map[common.Address][]*TickState {
 	return c.collection
 }
 
-func (r *repo) GetFromTo(from, to []byte) (map[common.Address][]*TickState, error) {
+func (r *rocksDBWrap) GetFromTo(from, to []byte) (map[common.Address][]*TickState, error) {
 	entries, err := r.db.GetRange(from, to)
 	if err != nil {
 		return nil, err
@@ -124,7 +125,7 @@ var (
 	EmptyTickStates = make([]*TickState, 0)
 )
 
-func (r *repo) GetTickStates(addr common.Address, tickLower, tickUpper int32) ([]*TickState, error) {
+func (r *rocksDBWrap) GetTickStates(addr common.Address, tickLower, tickUpper int32) ([]*TickState, error) {
 	tickStatesByAddr, err := r.GetFromTo(GetTickStateKey(addr, tickLower).GetKey(), GetTickStateKey(addr, tickUpper).GetKey())
 	if err != nil {
 		return nil, err
@@ -135,7 +136,7 @@ func (r *repo) GetTickStates(addr common.Address, tickLower, tickUpper int32) ([
 	return EmptyTickStates, nil
 }
 
-func (r *repo) GetPoolTickStates(addr common.Address) ([]*TickState, error) {
+func (r *rocksDBWrap) GetPoolTickStates(addr common.Address) ([]*TickState, error) {
 	fk := GetTickStateKey(addr, MinInt24)
 	tk := GetTickStateKey(addr, MaxInt24)
 	tickStates, err := r.GetFromTo(fk.GetKey(), tk.GetKey())
@@ -151,13 +152,13 @@ func (r *repo) GetPoolTickStates(addr common.Address) ([]*TickState, error) {
 	return tickState, nil
 }
 
-func (r *repo) SetHeight(height uint64) error {
+func (r *rocksDBWrap) SetHeight(height uint64) error {
 	var buf [8]byte
 	binary.BigEndian.PutUint64(buf[:], height)
 	return r.db.Set(HeightKey, buf[:])
 }
 
-func (r *repo) GetHeight() (uint64, error) {
+func (r *rocksDBWrap) GetHeight() (uint64, error) {
 	data, err := r.db.Get(HeightKey)
 	if err != nil {
 		if IsNotExist(err) {
@@ -202,7 +203,7 @@ func bytesToUint64(data []byte) uint64 {
 	return binary.BigEndian.Uint64(data)
 }
 
-func (r *repo) SetCurrentTick(address common.Address, currentTick int32) error {
+func (r *rocksDBWrap) SetCurrentTick(address common.Address, currentTick int32) error {
 	var key [22]byte
 	copy(key[:2], KeyPrefixCurrentTick)
 	copy(key[2:22], address[:])
@@ -210,7 +211,7 @@ func (r *repo) SetCurrentTick(address common.Address, currentTick int32) error {
 	return r.db.Set(key[:], int32ToBytes(currentTick))
 }
 
-func (r *repo) GetCurrentTick(address common.Address) (int32, error) {
+func (r *rocksDBWrap) GetCurrentTick(address common.Address) (int32, error) {
 	var key [22]byte
 	copy(key[:2], KeyPrefixCurrentTick)
 	copy(key[2:22], address[:])
@@ -223,7 +224,7 @@ func (r *repo) GetCurrentTick(address common.Address) (int32, error) {
 	return bytesToInt32(bytes), nil
 }
 
-func (r *repo) SetTickSpacing(address common.Address, tickSpacing int32) error {
+func (r *rocksDBWrap) SetTickSpacing(address common.Address, tickSpacing int32) error {
 	var key [22]byte
 	copy(key[:2], KeyPrefixTickSpacing)
 	copy(key[2:22], address[:])
@@ -231,7 +232,7 @@ func (r *repo) SetTickSpacing(address common.Address, tickSpacing int32) error {
 	return r.db.Set(key[:], int32ToBytes(tickSpacing))
 }
 
-func (r *repo) GetTickSpacing(address common.Address) (int32, error) {
+func (r *rocksDBWrap) GetTickSpacing(address common.Address) (int32, error) {
 	var key [22]byte
 	copy(key[:2], KeyPrefixTickSpacing)
 	copy(key[2:22], address[:])
@@ -244,16 +245,23 @@ func (r *repo) GetTickSpacing(address common.Address) (int32, error) {
 	return bytesToInt32(bytes), nil
 }
 
-func (r *repo) PoolExists(address common.Address) (bool, error) {
+func IsNotExistErr(err error) bool {
+	return errors.Is(err, ErrKeyNotFound)
+}
+
+func (r *rocksDBWrap) PoolExists(address common.Address) (bool, error) {
 	tickSpacing, err := r.GetTickSpacing(address)
 	if err != nil {
+		if IsNotExistErr(err) {
+			return false, nil
+		}
 		return false, err
 	}
 
 	return tickSpacing != 0, nil
 }
 
-func (r *repo) SetPoolHeight(address common.Address, height uint64) error {
+func (r *rocksDBWrap) SetPoolHeight(address common.Address, height uint64) error {
 	var key [22]byte
 	copy(key[:2], KeyPrefixPoolHeight)
 	copy(key[2:22], address[:])
@@ -261,7 +269,7 @@ func (r *repo) SetPoolHeight(address common.Address, height uint64) error {
 	return r.db.Set(key[:], uint64ToBytes(height))
 }
 
-func (r *repo) GetPoolHeight(address common.Address) (uint64, error) {
+func (r *rocksDBWrap) GetPoolHeight(address common.Address) (uint64, error) {
 	var key [22]byte
 	copy(key[:2], KeyPrefixPoolHeight)
 	copy(key[2:22], address[:])
@@ -274,7 +282,7 @@ func (r *repo) GetPoolHeight(address common.Address) (uint64, error) {
 	return bytesToUint64(bytes), nil
 }
 
-func (r *repo) GetPoolState(addr common.Address) (*PoolState, error) {
+func (r *rocksDBWrap) GetPoolState(addr common.Address) (*PoolState, error) {
 	height, err := r.GetPoolHeight(addr)
 	if err != nil {
 		return nil, err
@@ -296,7 +304,7 @@ func (r *repo) GetPoolState(addr common.Address) (*PoolState, error) {
 	}
 
 	return &PoolState{
-		GlobalState: &PoolGlobalState{
+		Global: &PoolGlobalState{
 			Height:      big.NewInt(int64(height)),
 			TickSpacing: big.NewInt(int64(tickSpacing)),
 			Tick:        big.NewInt(int64(tick)),
@@ -305,19 +313,19 @@ func (r *repo) GetPoolState(addr common.Address) (*PoolState, error) {
 	}, nil
 }
 
-func (r *repo) SetPoolState(addr common.Address, poolState *PoolState) error {
+func (r *rocksDBWrap) SetPoolState(addr common.Address, poolState *PoolState) error {
 	// TODO mutex lock
-	err := r.SetPoolHeight(addr, poolState.GlobalState.Height.Uint64())
+	err := r.SetPoolHeight(addr, poolState.Global.Height.Uint64())
 	if err != nil {
 		return err
 	}
 
-	err = r.SetCurrentTick(addr, int32(poolState.GlobalState.Tick.Int64()))
+	err = r.SetCurrentTick(addr, int32(poolState.Global.Tick.Int64()))
 	if err != nil {
 		return err
 	}
 
-	err = r.SetTickSpacing(addr, int32(poolState.GlobalState.TickSpacing.Int64()))
+	err = r.SetTickSpacing(addr, int32(poolState.Global.TickSpacing.Int64()))
 	if err != nil {
 		return err
 	}

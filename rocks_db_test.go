@@ -30,7 +30,7 @@ func TestGetSetHeight(t *testing.T) {
 	}
 	defer db.Close()
 
-	dbw := NewRepo(db)
+	dbw := NewDB(db)
 	height, err := dbw.GetHeight()
 	require.NoError(t, err)
 	require.Equal(t, uint64(0), height)
@@ -56,7 +56,7 @@ func TestGetSetTick(t *testing.T) {
 	}
 	defer db.Close()
 
-	dbw := NewRepo(db)
+	dbw := NewDB(db)
 
 	testTick := &TickState{
 		LiquidityNet: big.NewInt(1),
@@ -84,7 +84,7 @@ func TestGetTicks(t *testing.T) {
 	}
 	defer db.Close()
 
-	r := NewRepo(db)
+	r := NewDB(db)
 
 	addr := common.HexToAddress("0xffff")
 	tn1 := int32(-1)

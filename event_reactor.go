@@ -15,90 +15,95 @@ type EventReactor interface {
 }
 
 type eventReactor struct {
-	wg    *sync.WaitGroup
-	db    Repo
-	cache Cache
-	cc    *ContractCaller
+	wg              *sync.WaitGroup
+	db              DB
+	poolStateGetter PoolStateGetter
 }
 
-func (ea *eventReactor) ReactBlockEvent(blockEvent *BlockEvent) error {
+func IsIgnorantError(err error) bool {
+	if errors.Is(err, ErrPairNotFound) ||
+		errors.Is(err, ErrPairFiltered) ||
+		errors.Is(err, ErrNotV3Pool) {
+		return true
+	}
+	return false
+}
+
+func (r *eventReactor) ReactBlockEvent(blockEvent *BlockEvent) error {
 	for _, e := range blockEvent.Events {
-		pair, ok := ea.cache.GetPair(e.Address)
-		if !ok {
-			Log.Info("pool not cached", zap.String("addr", e.Address.String()))
-			return nil
-		}
-
-		if pair.Filtered {
-			Log.Info("pool filtered", zap.String("addr", e.Address.String()))
-			return nil
-		}
-
-		if pair.ProtocolId != 3 {
-			Log.Info("pool not v3", zap.String("addr", e.Address.String()))
-			return nil
-		}
-
-		pts, err := GetPoolStateFromDBOrContractCaller(ea.db, ea.cc, pair.Address)
+		exist, err := r.db.PoolExists(e.Address)
 		if err != nil {
-			Log.Info("pool get error", zap.String("addr", e.Address.String()))
-			return err
+			Log.Fatal("PoolExists error", zap.String("addr", e.Address.String()), zap.Error(err)) // TODO check Fatal?
 		}
 
-		if pts.GlobalState.Height.Uint64() >= blockEvent.Height {
+		if !exist {
+			_, err = r.poolStateGetter.GetPoolState(e.Address)
+			if err != nil {
+				Log.Info("GetPoolState error", zap.String("addr", e.Address.String()), zap.Error(err))
+				if IsIgnorantError(err) {
+					continue
+				}
+				return err
+			}
+		}
+
+		height, err := r.db.GetPoolHeight(e.Address)
+		if err != nil {
+			Log.Fatal("GetPoolHeight error", zap.String("addr", e.Address.String()), zap.Error(err)) // TODO check Fatal?
+		}
+
+		if height >= blockEvent.Height {
 			continue
 		}
 
-		if err := ea.reactEvent(e); err != nil {
+		if err := r.reactEvent(e); err != nil {
 			return err
 		}
 
-		ea.db.SetPoolHeight(e.Address, blockEvent.Height) // TODO once per block
+		r.db.SetPoolHeight(e.Address, blockEvent.Height) // TODO once per block
 	}
-	return ea.db.SetHeight(blockEvent.Height)
+	return r.db.SetHeight(blockEvent.Height)
 }
 
-func (ea *eventReactor) PutInput(blockEvent *BlockEvent) {
+func (r *eventReactor) PutInput(blockEvent *BlockEvent) {
 	// no buffer now
-	err := ea.ReactBlockEvent(blockEvent)
+	err := r.ReactBlockEvent(blockEvent)
 	if err != nil {
-		Log.Fatal("reactBlockEvent error", zap.Error(err), zap.Uint64("height", blockEvent.Height))
+		Log.Fatal("ReactBlockEvent error", zap.Error(err), zap.Uint64("height", blockEvent.Height))
 	}
 }
 
-func (ea *eventReactor) FinInput() {
-	ea.shutdown()
+func (r *eventReactor) FinInput() {
+	r.shutdown()
 }
 
-func (ea *eventReactor) shutdown() {
-	ea.db.Close()
-	ea.wg.Done()
+func (r *eventReactor) shutdown() {
+	r.db.Close()
+	r.wg.Done()
 }
 
-func NewEventReactor(wg *sync.WaitGroup, db Repo, cache Cache, url string) EventReactor {
-	cc := NewContractCaller(url)
+func NewEventReactor(wg *sync.WaitGroup, db DB, poolStateGetter PoolStateGetter) EventReactor {
 	return &eventReactor{
-		wg:    wg,
-		db:    db,
-		cache: cache,
-		cc:    cc,
+		wg:              wg,
+		db:              db,
+		poolStateGetter: poolStateGetter,
 	}
 }
 
-func (ea *eventReactor) reactEvent(event *Event) error {
+func (r *eventReactor) reactEvent(event *Event) error {
 	switch event.Type {
 	case EventTypeMint:
-		ea.reactTick(event.Address, int32(event.TickLower.Int64()), event.Amount)
-		ea.reactTick(event.Address, int32(event.TickUpper.Int64()), new(big.Int).Neg(event.Amount))
+		r.reactTick(event.Address, int32(event.TickLower.Int64()), event.Amount)
+		r.reactTick(event.Address, int32(event.TickUpper.Int64()), new(big.Int).Neg(event.Amount))
 		Log.Info("Mint Event", zap.String("addr", event.Address.String()))
 
 	case EventTypeBurn:
-		ea.reactTick(event.Address, int32(event.TickLower.Int64()), new(big.Int).Neg(event.Amount))
-		ea.reactTick(event.Address, int32(event.TickUpper.Int64()), event.Amount)
+		r.reactTick(event.Address, int32(event.TickLower.Int64()), new(big.Int).Neg(event.Amount))
+		r.reactTick(event.Address, int32(event.TickUpper.Int64()), event.Amount)
 		Log.Info("Burn Event", zap.String("addr", event.Address.String()))
 
 	case EventTypeSwap:
-		ea.db.SetCurrentTick(event.Address, int32(event.Tick.Int64()))
+		r.db.SetCurrentTick(event.Address, int32(event.Tick.Int64()))
 		Log.Info("Swap Event", zap.String("addr", event.Address.String()))
 
 	default:
@@ -112,14 +117,14 @@ func IsNotExist(err error) bool {
 	return errors.Is(err, ErrKeyNotFound)
 }
 
-func (ea *eventReactor) reactTick(addr common.Address, tick int32, amount *big.Int) error {
-	tickState := ea.getOrNewTickState(addr, tick)
+func (r *eventReactor) reactTick(addr common.Address, tick int32, amount *big.Int) error {
+	tickState := r.getOrNewTickState(addr, tick)
 	tickState.AddLiquidity(amount)
-	return ea.db.SetTickState(addr, tickState)
+	return r.db.SetTickState(addr, tickState)
 }
 
-func (ea *eventReactor) getOrNewTickState(addr common.Address, tick int32) *TickState {
-	tickState, err := ea.db.GetTickState(addr, tick)
+func (r *eventReactor) getOrNewTickState(addr common.Address, tick int32) *TickState {
+	tickState, err := r.db.GetTickState(addr, tick)
 	if err != nil {
 		if IsNotExist(err) {
 			return NewTickState(tick)

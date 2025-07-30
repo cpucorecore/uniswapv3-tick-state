@@ -41,7 +41,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	dbWrap := NewRepo(rocksDB)
+	db := NewDB(rocksDB)
 
 	redisCli := redis.NewClient(&redis.Options{
 		Addr:     G.Redis.Addr,
@@ -50,16 +50,17 @@ func main() {
 	})
 	cache := NewTwoTierCache(redisCli)
 
-	aso := NewAPIServer(G.EthRPC.HTTP, cache, dbWrap)
-	aso.Start()
+	psg := NewPoolStateGetter(cache, db, G.EthRPC.HTTP)
+	as := NewAPIServer(psg)
+	as.Start()
 
 	wg := &sync.WaitGroup{}
 	wg.Add(1)
-	reactor := NewEventReactor(wg, dbWrap, cache, G.EthRPC.HTTP)
+	reactor := NewEventReactor(wg, db, psg)
 	parser := NewBlockParser()
 	parser.MountOutput(reactor)
 
-	finishedHeight, err := dbWrap.GetHeight()
+	finishedHeight, err := db.GetHeight()
 	if err != nil {
 		Log.Fatal("failed to get finished height", zap.Error(err))
 	}

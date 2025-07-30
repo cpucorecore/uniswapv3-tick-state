@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -81,14 +80,26 @@ type PoolGlobalState struct {
 	Liquidity    *big.Int `json:"liquidity"`
 	SqrtPriceX96 *big.Int `json:"sqrtPriceX96"`
 }
+
+type Token struct {
+	Symbol   string
+	Decimals int8
+}
+
 type PoolState struct {
-	GlobalState *PoolGlobalState
-	TickStates  []*TickState
+	Token0     *Token
+	Token1     *Token
+	Global     *PoolGlobalState
+	TickStates []*TickState
 }
 
 func (s *PoolState) String() string {
+	return string(s.Json())
+}
+
+func (s *PoolState) Json() []byte {
 	bytes, _ := json.Marshal(s)
-	return string(bytes)
+	return bytes
 }
 
 type CallContractReq struct {
@@ -99,17 +110,4 @@ type CallContractReq struct {
 
 func (r *CallContractReq) String() string {
 	return fmt.Sprintf("address: %s, data: [%v]", r.Address.String(), hexutil.Encode(r.Data))
-}
-
-func BuildCallContractReqDynamic(blockNumber *big.Int, address common.Address, abi *abi.ABI, name string, args ...interface{}) *CallContractReq {
-	data, err := abi.Pack(name, args...)
-	if err != nil {
-		panic(err)
-	}
-
-	return &CallContractReq{
-		BlockNumber: blockNumber,
-		Address:     address,
-		Data:        data,
-	}
 }
