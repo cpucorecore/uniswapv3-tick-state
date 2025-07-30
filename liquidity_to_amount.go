@@ -106,17 +106,15 @@ func BuildRangeLiquidityArray(tickStates []*TickState) []*RangeLiquidity {
 	return rangeLiquidity
 }
 
-func CalcRangeAmountArray(rangeLiquidityArray []*RangeLiquidity, tickLower, tickUpper int32, token0Decimals, token1Decimals int) []*RangeAmount {
+func CalcRangeAmountArray(rangeLiquidityArray []*RangeLiquidity, token0Decimals, token1Decimals int) []*RangeAmount {
 	if len(rangeLiquidityArray) == 0 {
 		return nil
 	}
 
 	var rangeAmountArray []*RangeAmount
 	for _, rangeLiquidity := range rangeLiquidityArray {
-		if rangeLiquidity.TickLower >= tickLower && rangeLiquidity.TickUpper <= tickUpper {
-			rangeAmount := CalcRangeAmount(rangeLiquidity.Liquidity, rangeLiquidity.TickLower, rangeLiquidity.TickUpper, token0Decimals, token1Decimals)
-			rangeAmountArray = append(rangeAmountArray, rangeAmount)
-		}
+		rangeAmount := CalcRangeAmount(rangeLiquidity.Liquidity, rangeLiquidity.TickLower, rangeLiquidity.TickUpper, token0Decimals, token1Decimals)
+		rangeAmountArray = append(rangeAmountArray, rangeAmount)
 	}
 
 	return rangeAmountArray

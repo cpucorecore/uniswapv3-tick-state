@@ -136,8 +136,9 @@ func (a *apiServer) HandlerPoolState(w http.ResponseWriter, r *http.Request) {
 		rangeLiquidityArray = FilterRangeLiquidityArray(rangeLiquidityArray, fromTick, toTick)
 		if params.Type == ParamTypeTokenAmountDetail {
 			rangeLiquidityArray = SplitRangeLiquidityArray(rangeLiquidityArray, tickSpacing)
+			rangeLiquidityArray = FilterRangeLiquidityArray(rangeLiquidityArray, fromTick, toTick)
 		}
-		rangeAmountArray := CalcRangeAmountArray(rangeLiquidityArray, fromTick, toTick, int(poolState.Token0.Decimals), int(poolState.Token1.Decimals))
+		rangeAmountArray := CalcRangeAmountArray(rangeLiquidityArray, int(poolState.Token0.Decimals), int(poolState.Token1.Decimals))
 
 		if params.Format == "json" {
 			w.Header().Set("Content-Type", "application/json")
