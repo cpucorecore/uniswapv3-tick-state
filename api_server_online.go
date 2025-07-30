@@ -4,13 +4,14 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"github.com/ethereum/go-ethereum/common"
-	"go.uber.org/zap"
 	"html/template"
 	"math"
 	"net/http"
 	"strconv"
 	"time"
+
+	"github.com/ethereum/go-ethereum/common"
+	"go.uber.org/zap"
 )
 
 const (
@@ -114,6 +115,7 @@ func (a *apiServer) HandlerPoolState(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(fmt.Sprintf("get tick states error: %v", err)))
 		return
 	}
+	Log.Info(fmt.Sprintf("get pool states: %s", poolState))
 
 	token0, token1 := pair.Token0Core, pair.Token1Core
 	if pair.TokensReversed {
@@ -127,12 +129,13 @@ func (a *apiServer) HandlerPoolState(w http.ResponseWriter, r *http.Request) {
 	tickUpper := centerTick + (tickOffset+1)*tickSpacing
 
 	now := time.Now()
-	amount, summary := CalcAmount(poolState.TickStates, tickSpacing, tickLower, tickUpper, int(token0.Decimals), int(token1.Decimals))
+	rangeLiquidityArray := BuildRangeLiquidityArray(poolState.TickStates)
+	rangeAmountArray := CalcRangeAmountArray(rangeLiquidityArray, tickLower, tickUpper, int(token0.Decimals), int(token1.Decimals))
 	Log.Info("CalcAmount duration", zap.Any("ms", time.Since(now).Milliseconds()))
 
 	now = time.Now()
-	htmlStr, err := RenderTickAmountCharts(amount, summary, currentTick, tickSpacing, token0.Symbol, token1.Symbol)
-	Log.Info("RenderTickAmountCharts duration", zap.Any("ms", time.Since(now).Milliseconds()))
+	htmlStr, err := RenderRangeAmountArrayChart(rangeAmountArray, currentTick, tickSpacing, token0.Symbol, token1.Symbol)
+	Log.Info("RenderRangeAmountArrayChart duration", zap.Any("ms", time.Since(now).Milliseconds()))
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte("render error"))
@@ -161,12 +164,8 @@ func NewAPIServer(url string, cache Cache, db Repo) APIServer {
 	}
 }
 
-func RenderTickAmountCharts(amount, summary []TickAmount, currentTick, tickSpacing int32, token0Symbol, token1Symbol string) (string, error) {
-	amountJSON, err := json.Marshal(amount)
-	if err != nil {
-		return "", err
-	}
-	summaryJSON, err := json.Marshal(summary)
+func RenderRangeAmountArrayChart(rangeAmountArray []*RangeAmount, currentTick, tickSpacing int32, token0Symbol, token1Symbol string) (string, error) {
+	rangeAmountJSON, err := json.Marshal(rangeAmountArray)
 	if err != nil {
 		return "", err
 	}
@@ -178,20 +177,17 @@ func RenderTickAmountCharts(amount, summary []TickAmount, currentTick, tickSpaci
 <html>
 <head>
     <meta charset="utf-8">
-    <title>Tick Amount Chart</title>
+    <title>Range Amount Chart</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
     <div style="margin-bottom: 16px;">
         <b>交易对:</b> {{.Token0Symbol}}/{{.Token1Symbol}} &nbsp; <b>当前 Tick:</b> {{.CurrentTick}} &nbsp; <b>TickSpacing:</b> {{.TickSpacing}} &nbsp; <b>当前 Tick 价格:</b> {{.CurrentPrice}}
     </div>
-    <h2>TickSpace 明细</h2>
-    <canvas id="amountChart"></canvas>
-    <h2>原始Tick区间合计</h2>
-    <canvas id="summaryChart"></canvas>
+    <h2>Range Amount Chart</h2>
+    <canvas id="rangeAmountChart"></canvas>
     <script>
-        const amount = {{.Amount}};
-        const summary = {{.Summary}};
+        const rangeAmountArray = {{.RangeAmountArray}};
         const currentTick = {{.CurrentTick}};
 		const tickSpacing = {{.TickSpacing}};
 
@@ -252,8 +248,7 @@ func RenderTickAmountCharts(amount, summary []TickAmount, currentTick, tickSpaci
             });
         }
 
-        makeChart('amountChart', amount, currentTick);
-        makeChart('summaryChart', summary, currentTick);
+        makeChart('rangeAmountChart', rangeAmountArray, currentTick);
     </script>
 </body>
 </html>
@@ -261,13 +256,12 @@ func RenderTickAmountCharts(amount, summary []TickAmount, currentTick, tickSpaci
 	t := template.Must(template.New("chart").Delims("{{", "}}").Parse(html))
 	var buf bytes.Buffer
 	err = t.Execute(&buf, map[string]interface{}{
-		"Amount":       template.JS(amountJSON),
-		"Summary":      template.JS(summaryJSON),
-		"CurrentTick":  currentTick,
-		"TickSpacing":  tickSpacing,
-		"CurrentPrice": currentPrice,
-		"Token0Symbol": token0Symbol,
-		"Token1Symbol": token1Symbol,
+		"RangeAmountArray": template.JS(rangeAmountJSON),
+		"CurrentTick":      currentTick,
+		"TickSpacing":      tickSpacing,
+		"CurrentPrice":     currentPrice,
+		"Token0Symbol":     token0Symbol,
+		"Token1Symbol":     token1Symbol,
 	})
 	if err != nil {
 		return "", err
