@@ -73,6 +73,7 @@ type RangeLiquidity struct {
 	Liquidity *big.Int
 }
 
+// BuildRangeLiquidityArray 根据tickStates构建RangeLiquidity数组
 func BuildRangeLiquidityArray(tickStates []*TickState) []*RangeLiquidity {
 	if len(tickStates) == 0 {
 		return nil
@@ -137,6 +138,24 @@ func SplitRangeLiquidityArray(rangeLiquidityArray []*RangeLiquidity, tickSpacing
 	}
 
 	return result
+}
+
+// FilterRangeLiquidityArray 根据tickFrom和tickTo筛选RangeLiquidity数组
+// 只保留与指定区间有重叠的RangeLiquidity
+func FilterRangeLiquidityArray(rangeLiquidityArray []*RangeLiquidity, fromTick, toTick int32) []*RangeLiquidity {
+	if len(rangeLiquidityArray) == 0 {
+		return nil
+	}
+
+	var filteredArray []*RangeLiquidity
+	for _, rl := range rangeLiquidityArray {
+		// 只添加与指定区间有重叠的RangeLiquidity
+		if rl.TickUpper > fromTick && rl.TickLower < toTick {
+			filteredArray = append(filteredArray, rl)
+		}
+	}
+
+	return filteredArray
 }
 
 // CalcAmountsForTickRange 计算某个[tickLower, tickUpper)区间内的amount0/amount1总和和tickspace明细
@@ -228,4 +247,13 @@ func CalcRangeAmount(liquidity *big.Int, tickLower, tickUpper int32, token0Decim
 		Amount0:   amount0,
 		Amount1:   amount1,
 	}
+}
+
+// CalculateTickRange 根据tickOffset、tickSpacing和当前tick计算fromTick和toTick
+// tickOffset表示当前tick前后多少个tickSpacing区间
+func CalculateTickRange(currentTick, tickOffset, tickSpacing int32) (fromTick, toTick int32) {
+	centerTick := (currentTick / tickSpacing) * tickSpacing
+	fromTick = centerTick - tickOffset*tickSpacing
+	toTick = centerTick + (tickOffset+1)*tickSpacing
+	return fromTick, toTick
 }

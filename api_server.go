@@ -5,11 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/ethereum/go-ethereum/common"
 	"html/template"
 	"math"
 	"net/http"
 	"strconv"
+
+	"github.com/ethereum/go-ethereum/common"
 )
 
 const (
@@ -127,11 +128,17 @@ func (a *apiServer) HandlerPoolState(w http.ResponseWriter, r *http.Request) {
 		return
 
 	case ParamTypeTokenAmount, ParamTypeTokenAmountDetail:
+		currentTick := int32(poolState.Global.Tick.Int64())
+		tickSpacing := int32(poolState.Global.TickSpacing.Int64())
+		fromTick, toTick := CalculateTickRange(currentTick, int32(params.TickOffset), tickSpacing)
+
 		rangeLiquidityArray := BuildRangeLiquidityArray(poolState.TickStates)
+		rangeLiquidityArray = FilterRangeLiquidityArray(rangeLiquidityArray, fromTick, toTick)
 		if params.Type == ParamTypeTokenAmountDetail {
-			rangeLiquidityArray = SplitRangeLiquidityArray(rangeLiquidityArray, int32(poolState.Global.TickSpacing.Int64()))
+			rangeLiquidityArray = SplitRangeLiquidityArray(rangeLiquidityArray, tickSpacing)
 		}
-		rangeAmountArray := CalcRangeAmountArray(rangeLiquidityArray, int32(poolState.Global.Tick.Int64()), int32(poolState.Global.TickSpacing.Int64()), int(poolState.Token0.Decimals), int(poolState.Token1.Decimals))
+		rangeAmountArray := CalcRangeAmountArray(rangeLiquidityArray, fromTick, toTick, int(poolState.Token0.Decimals), int(poolState.Token1.Decimals))
+
 		if params.Format == "json" {
 			w.Header().Set("Content-Type", "application/json")
 			jsonData, _ := json.Marshal(rangeAmountArray)
