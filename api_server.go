@@ -145,7 +145,7 @@ func (a *apiServer) HandlerPoolState(w http.ResponseWriter, r *http.Request) {
 			w.Write(jsonData)
 			return
 		} else {
-			htmlStr, err := RenderRangeAmountArrayChart(rangeAmountArray, int32(poolState.Global.Tick.Int64()), int32(poolState.Global.TickSpacing.Int64()), poolState.Token0.Symbol, poolState.Token1.Symbol)
+			htmlStr, err := RenderRangeAmountArrayChart(rangeAmountArray, currentTick, tickSpacing, poolState.Token0.Symbol, poolState.Token1.Symbol)
 			if err != nil {
 				w.WriteHeader(http.StatusInternalServerError)
 				w.Write([]byte("render error"))
@@ -208,10 +208,11 @@ func RenderRangeAmountArrayChart(rangeAmountArray []*RangeAmount, currentTick, t
             return {ticks, prices};
         }
 
-		function getBarColors(ticks, tickSpacing, currentTick) {
-			return ticks.map(tickLower => {
-				const tickUpper = tickLower + tickSpacing;
-				return (currentTick >= tickLower && currentTick <= tickUpper)
+		function getBarColors(arr, currentTick) {
+			return arr.map(rangeAmount => {
+				const tickLower = rangeAmount.TickLower;
+				const tickUpper = rangeAmount.TickUpper;
+				return (currentTick >= tickLower && currentTick < tickUpper)
 					? 'rgba(255, 99, 132, 0.8)'
 					: 'rgba(54, 162, 235, 0.5)';
 			});
@@ -219,7 +220,7 @@ func RenderRangeAmountArrayChart(rangeAmountArray []*RangeAmount, currentTick, t
 
         function makeChart(canvasId, arr, currentTick) {
             const {ticks, prices} = getTicksAndPrices(arr);
-            const barColors = getBarColors(ticks, tickSpacing, currentTick);
+            const barColors = getBarColors(arr, currentTick);
             const data = {
                 labels: ticks,
                 datasets: [{
