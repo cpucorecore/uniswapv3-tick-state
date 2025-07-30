@@ -55,9 +55,9 @@ const (
 )
 
 const (
-	ParamTypeLiquidity         = "liquidity"
-	ParamTypeTokenAmount       = "token_amount"
-	ParamTypeTokenAmountDetail = "token_amount_detail"
+	ParamTypeLiquidity         = "1" // liquidity
+	ParamTypeTokenAmount       = "2" // token_amount
+	ParamTypeTokenAmountDetail = "3" // token_amount_detail
 )
 
 var (
@@ -145,7 +145,7 @@ func (a *apiServer) HandlerPoolState(w http.ResponseWriter, r *http.Request) {
 			w.Write(jsonData)
 			return
 		} else {
-			htmlStr, err := RenderRangeAmountArrayChart(rangeAmountArray, currentTick, tickSpacing, poolState.Token0.Symbol, poolState.Token1.Symbol)
+			htmlStr, err := RenderRangeAmountArrayChart(rangeAmountArray, currentTick, tickSpacing, uint64(poolState.Global.Height.Int64()), poolState.Token0.Symbol, poolState.Token1.Symbol)
 			if err != nil {
 				w.WriteHeader(http.StatusInternalServerError)
 				w.Write([]byte("render error"))
@@ -175,7 +175,7 @@ func NewAPIServer(poolStateGetter PoolStateGetter) APIServer {
 	}
 }
 
-func RenderRangeAmountArrayChart(rangeAmountArray []*RangeAmount, currentTick, tickSpacing int32, token0Symbol, token1Symbol string) (string, error) {
+func RenderRangeAmountArrayChart(rangeAmountArray []*RangeAmount, currentTick, tickSpacing int32, height uint64, token0Symbol, token1Symbol string) (string, error) {
 	rangeAmountJSON, err := json.Marshal(rangeAmountArray)
 	if err != nil {
 		return "", err
@@ -193,7 +193,7 @@ func RenderRangeAmountArrayChart(rangeAmountArray []*RangeAmount, currentTick, t
 </head>
 <body>
     <div style="margin-bottom: 16px;">
-        <b>交易对:</b> {{.Token0Symbol}}/{{.Token1Symbol}} &nbsp; <b>当前 Tick:</b> {{.CurrentTick}} &nbsp; <b>TickSpacing:</b> {{.TickSpacing}} &nbsp; <b>当前 Tick 价格:</b> {{.CurrentPrice}}
+        <b>高度:</b> {{.Height}} &nbsp; <b>交易对:</b> {{.Token0Symbol}}/{{.Token1Symbol}} &nbsp; <b>当前 Tick:</b> {{.CurrentTick}} &nbsp; <b>TickSpacing:</b> {{.TickSpacing}} &nbsp; <b>当前 Tick 价格:</b> {{.CurrentPrice}}
     </div>
     <h2>Range Amount Chart</h2>
     <canvas id="rangeAmountChart"></canvas>
@@ -271,6 +271,7 @@ func RenderRangeAmountArrayChart(rangeAmountArray []*RangeAmount, currentTick, t
 		"RangeAmountArray": template.JS(rangeAmountJSON),
 		"CurrentTick":      currentTick,
 		"TickSpacing":      tickSpacing,
+		"Height":           height,
 		"CurrentPrice":     currentPrice,
 		"Token0Symbol":     token0Symbol,
 		"Token1Symbol":     token1Symbol,
