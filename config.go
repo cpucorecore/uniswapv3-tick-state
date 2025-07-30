@@ -28,11 +28,19 @@ type RedisConf struct {
 	Password string `json:"password"`
 }
 
+type RocksDBConf struct {
+	EnableLog            bool   `json:"enable_log"`
+	BlockCacheSize       uint64 `json:"block_cache_size"`
+	WriteBufferSize      uint64 `json:"write_buffer_size"`
+	MaxWriteBufferNumber int    `json:"max_write_buffer_number"`
+}
+
 type Config struct {
 	Log          *LogConf          `json:"log"`
 	EthRPC       *EthRPCConf       `json:"eth_rpc"`
 	BlockCrawler *BlockCrawlerConf `json:"block_crawler"`
 	Redis        *RedisConf        `json:"redis"`
+	RocksDB      *RocksDBConf      `json:"rocksdb"`
 }
 
 var (
@@ -55,6 +63,12 @@ var (
 			Addr:     "localhost:6379",
 			Username: "",
 			Password: "",
+		},
+		RocksDB: &RocksDBConf{
+			EnableLog:            true,
+			BlockCacheSize:       uint64(1024 * 1024 * 1024 * 1), // 1GB
+			WriteBufferSize:      uint64(1024 * 1024 * 128),      // 128MB
+			MaxWriteBufferNumber: 2,
 		},
 	}
 

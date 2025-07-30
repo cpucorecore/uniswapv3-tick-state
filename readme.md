@@ -183,3 +183,79 @@ HTML响应包含一个交互式图表，显示：
 http://192.168.100.16:29292/pool_state?address=0x172fcD41E0913e95784454622d1c3724f546f849&tick_offset=100&type=3&format=html
 ```
 
+## 配置文件说明
+
+### 启动参数
+
+```bash
+# 显示版本信息
+./uniswapv3-tick-state -v
+
+# 指定配置文件
+./uniswapv3-tick-state -c config.json
+```
+
+### 配置文件格式
+
+配置文件为JSON格式，包含以下配置项：
+
+#### 日志配置 (log)
+```json
+{
+  "async": false,           // 是否异步写入日志
+  "buffer_size": 1000000,   // 日志缓冲区大小
+  "flush_interval": 1       // 日志刷新间隔（秒）
+}
+```
+
+#### 以太坊RPC配置 (eth_rpc)
+```json
+{
+  "http": "https://bsc-dataseed.binance.org/",     // HTTP RPC地址
+  "archive": "https://bsc-dataseed.binance.org/",  // 归档节点地址
+  "ws": "ws://bsc-dataseed.binance.org/"           // WebSocket地址
+}
+```
+
+#### 区块爬虫配置 (block_crawler)
+```json
+{
+  "pool_size": 1,        // 工作池大小
+  "from_height": 0       // 起始区块高度
+}
+```
+
+#### Redis配置 (redis)
+```json
+{
+  "addr": "localhost:6379",  // Redis地址
+  "username": "",            // Redis用户名
+  "password": ""             // Redis密码
+}
+```
+
+#### RocksDB配置 (rocksdb)
+```json
+{
+  "enable_log": true,                    // 是否启用RocksDB日志
+  "block_cache_size": 1073741824,        // 块缓存大小（字节），默认1GB
+  "write_buffer_size": 134217728,        // 写缓冲区大小（字节），默认128MB
+  "max_write_buffer_number": 2           // 最大写缓冲区数量
+}
+```
+
+### 配置建议
+
+#### RocksDB性能调优
+- **block_cache_size**: 建议设置为可用内存的25-30%
+- **write_buffer_size**: 建议设置为64MB-256MB
+- **max_write_buffer_number**: 建议设置为2-4
+
+#### 内存使用估算
+- RocksDB缓存: `block_cache_size + write_buffer_size * max_write_buffer_number`
+- 示例: 1GB + 128MB × 2 = 1.25GB
+
+### 示例配置文件
+
+参考 `config.example.json` 文件获取完整的配置示例。
+

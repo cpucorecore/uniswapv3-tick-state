@@ -4,12 +4,13 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"github.com/go-redis/redis/v8"
-	"go.uber.org/zap"
 	"os"
 	"os/signal"
 	"sync"
 	"syscall"
+
+	"github.com/go-redis/redis/v8"
+	"go.uber.org/zap"
 )
 
 func main() {
@@ -33,10 +34,10 @@ func main() {
 	ctx := context.Background()
 
 	rocksDB, err := NewRocksDB(".db", &RocksDBOptions{
-		EnableLog:            true,
-		BlockCacheSize:       1024 * 1024 * 1024 * 1,
-		WriteBufferSize:      1024 * 1024 * 128,
-		MaxWriteBufferNumber: 2,
+		EnableLog:            G.RocksDB.EnableLog,
+		BlockCacheSize:       G.RocksDB.BlockCacheSize,
+		WriteBufferSize:      G.RocksDB.WriteBufferSize,
+		MaxWriteBufferNumber: G.RocksDB.MaxWriteBufferNumber,
 	})
 	if err != nil {
 		panic(err)
