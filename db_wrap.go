@@ -137,8 +137,8 @@ func (r *rocksDBWrap) GetTickStates(addr common.Address, tickLower, tickUpper in
 }
 
 func (r *rocksDBWrap) GetPoolTickStates(addr common.Address) ([]*TickState, error) {
-	fk := GetTickStateKey(addr, MinInt24)
-	tk := GetTickStateKey(addr, MaxInt24)
+	fk := GetTickStateKey(addr, MinTick)
+	tk := GetTickStateKey(addr, MaxTick)
 	tickStates, err := r.GetFromTo(fk.GetKey(), tk.GetKey())
 	if err != nil {
 		return nil, err

@@ -35,13 +35,13 @@ func GetTickStateKey(addr common.Address, tick int32) TickStateKey {
 	return key
 }
 
-func BytesToTickStateKey(b []byte) TickStateKey {
-	if len(b) != TickStateKeyLen {
+func BytesToTickStateKey(bytes []byte) TickStateKey {
+	if len(bytes) != TickStateKeyLen {
 		panic("unexpected bytes length") // TODO check
 	}
 
 	var key TickStateKey
-	key.setBytes(b)
+	key.setBytes(bytes)
 	return key
 }
 
@@ -51,16 +51,18 @@ func int32ToOrderedBytes(n int32) []byte {
 	return buf
 }
 
-func orderedBytesToInt32(b []byte) int32 {
-	if len(b) != 4 {
+func orderedBytesToInt32(bytes []byte) int32 {
+	if len(bytes) != 4 {
 		return 0
 	}
-	return int32(binary.BigEndian.Uint32(b) - 0x80000000)
+	return int32(binary.BigEndian.Uint32(bytes) - 0x80000000)
 }
 
 const (
-	MinInt24 = int32(-8388608) // int24
-	MaxInt24 = int32(8388607)  // int24
+	MinTick  = int32(-887272) // uniswap v3 core: ./contracts/libraries/TickMath.sol:9: int24 internal constant MIN_TICK = -887272;
+	MaxTick  = int32(887272)
+	MinInt24 = int32(-8388608)
+	MaxInt24 = int32(8388607)
 )
 
 var (
