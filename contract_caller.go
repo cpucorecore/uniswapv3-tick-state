@@ -4,14 +4,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/avast/retry-go/v4"
-	"github.com/ethereum/go-ethereum"
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/ethclient"
 	"math/big"
 	"strings"
 	"time"
 	"uniswapv3-tick-state/abi_instance"
+
+	"github.com/avast/retry-go/v4"
+	"github.com/ethereum/go-ethereum"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/ethclient"
 )
 
 type ContractCaller struct {
@@ -78,8 +79,8 @@ var (
 	ErrEmptyOutput = errors.New("empty output")
 )
 
-func (c *ContractCaller) GetPoolState(poolAddr common.Address) (*PoolState, error) {
-	data, err := abi_instance.LensABI.Pack("getAllTicks", poolAddr)
+func (c *ContractCaller) GetPoolState(addr common.Address) (*PoolState, error) {
+	data, err := abi_instance.LensABI.Pack("getAllTicks", addr)
 	if err != nil {
 		return nil, err
 	}

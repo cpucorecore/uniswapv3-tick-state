@@ -6,3 +6,4 @@ uniswapv3-tick-state
 .venv
 venv
 __pycache__
+.vscode

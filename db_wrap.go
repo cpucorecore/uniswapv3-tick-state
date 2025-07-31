@@ -3,24 +3,55 @@ package main
 import (
 	"encoding/binary"
 	"errors"
-	"github.com/ethereum/go-ethereum/common"
 	"math/big"
+
+	"github.com/ethereum/go-ethereum/common"
 )
 
+var (
+	HeightKey            = []byte("1:")
+	KeyPrefixTickState   = []byte("2:")
+	KeyPrefixCurrentTick = []byte("3:")
+	KeyPrefixTickSpacing = []byte("4:")
+	KeyPrefixPoolHeight  = []byte("5:")
+)
+
+func makeCurrentTickKey(addr common.Address) [22]byte {
+	var key [22]byte
+	copy(key[:2], KeyPrefixCurrentTick)
+	copy(key[2:22], addr[:])
+	return key
+}
+
+func makeTickSpacingKey(addr common.Address) [22]byte {
+	var key [22]byte
+	copy(key[:2], KeyPrefixTickSpacing)
+	copy(key[2:22], addr[:])
+	return key
+}
+
+func makePoolHeightKey(addr common.Address) [22]byte {
+	var key [22]byte
+	copy(key[:2], KeyPrefixPoolHeight)
+	copy(key[2:22], addr[:])
+	return key
+}
+
 type TickStateDB interface {
-	SetTickState(address common.Address, tickState *TickState) error
-	GetTickState(address common.Address, tick int32) (*TickState, error)
-	GetTickStates(address common.Address, tickLower, tickUpper int32) ([]*TickState, error)
-	GetPoolTickStates(address common.Address) ([]*TickState, error)
-	SetCurrentTick(address common.Address, currentTick int32) error
-	GetCurrentTick(address common.Address) (int32, error)
-	SetTickSpacing(address common.Address, tickSpacing int32) error
-	GetTickSpacing(address common.Address) (int32, error)
-	PoolExists(address common.Address) (bool, error)
-	SetPoolHeight(address common.Address, height uint64) error
-	GetPoolHeight(address common.Address) (uint64, error)
-	GetPoolState(poolAddr common.Address) (*PoolState, error)
-	SetPoolState(poolAddr common.Address, poolTicks *PoolState) error
+	SetTickState(addr common.Address, tickState *TickState) error
+	GetTickState(addr common.Address, tick int32) (*TickState, error)
+	GetTickStates(addr common.Address, tickLower, tickUpper int32) ([]*TickState, error)
+	GetPoolTickStates(addr common.Address) ([]*TickState, error)
+	SetCurrentTick(addr common.Address, currentTick int32) error
+	GetCurrentTick(addr common.Address) (int32, error)
+	SetTickSpacing(addr common.Address, tickSpacing int32) error
+	GetTickSpacing(addr common.Address) (int32, error)
+	PoolExists(addr common.Address) (bool, error)
+	SetPoolHeight(addr common.Address, height uint64) error
+	GetPoolHeight(addr common.Address) (uint64, error)
+	GetPoolState(addr common.Address) (*PoolState, error)
+	SetPoolState(addr common.Address, poolTicks *PoolState) error
+	DeletePoolState(addr common.Address) error
 }
 
 type HeightDB interface {
@@ -176,14 +207,6 @@ func (r *rocksDBWrap) GetHeight() (uint64, error) {
 	return height, nil
 }
 
-var (
-	HeightKey            = []byte("1:")
-	KeyPrefixTickState   = []byte("2:")
-	KeyPrefixCurrentTick = []byte("3:")
-	KeyPrefixTickSpacing = []byte("4:")
-	KeyPrefixPoolHeight  = []byte("5:")
-)
-
 func int32ToBytes(n int32) []byte {
 	buf := make([]byte, 4)
 	binary.BigEndian.PutUint32(buf, uint32(n))
@@ -204,19 +227,13 @@ func bytesToUint64(data []byte) uint64 {
 	return binary.BigEndian.Uint64(data)
 }
 
-func (r *rocksDBWrap) SetCurrentTick(address common.Address, currentTick int32) error {
-	var key [22]byte
-	copy(key[:2], KeyPrefixCurrentTick)
-	copy(key[2:22], address[:])
-
+func (r *rocksDBWrap) SetCurrentTick(addr common.Address, currentTick int32) error {
+	key := makeCurrentTickKey(addr)
 	return r.db.Set(key[:], int32ToBytes(currentTick))
 }
 
-func (r *rocksDBWrap) GetCurrentTick(address common.Address) (int32, error) {
-	var key [22]byte
-	copy(key[:2], KeyPrefixCurrentTick)
-	copy(key[2:22], address[:])
-
+func (r *rocksDBWrap) GetCurrentTick(addr common.Address) (int32, error) {
+	key := makeCurrentTickKey(addr)
 	bytes, err := r.db.Get(key[:])
 	if err != nil {
 		return 0, err
@@ -225,19 +242,13 @@ func (r *rocksDBWrap) GetCurrentTick(address common.Address) (int32, error) {
 	return bytesToInt32(bytes), nil
 }
 
-func (r *rocksDBWrap) SetTickSpacing(address common.Address, tickSpacing int32) error {
-	var key [22]byte
-	copy(key[:2], KeyPrefixTickSpacing)
-	copy(key[2:22], address[:])
-
+func (r *rocksDBWrap) SetTickSpacing(addr common.Address, tickSpacing int32) error {
+	key := makeTickSpacingKey(addr)
 	return r.db.Set(key[:], int32ToBytes(tickSpacing))
 }
 
-func (r *rocksDBWrap) GetTickSpacing(address common.Address) (int32, error) {
-	var key [22]byte
-	copy(key[:2], KeyPrefixTickSpacing)
-	copy(key[2:22], address[:])
-
+func (r *rocksDBWrap) GetTickSpacing(addr common.Address) (int32, error) {
+	key := makeTickSpacingKey(addr)
 	bytes, err := r.db.Get(key[:])
 	if err != nil {
 		return 0, err
@@ -250,8 +261,8 @@ func IsNotExistErr(err error) bool {
 	return errors.Is(err, ErrKeyNotFound)
 }
 
-func (r *rocksDBWrap) PoolExists(address common.Address) (bool, error) {
-	tickSpacing, err := r.GetTickSpacing(address)
+func (r *rocksDBWrap) PoolExists(addr common.Address) (bool, error) {
+	tickSpacing, err := r.GetTickSpacing(addr)
 	if err != nil {
 		if IsNotExistErr(err) {
 			return false, nil
@@ -262,19 +273,13 @@ func (r *rocksDBWrap) PoolExists(address common.Address) (bool, error) {
 	return tickSpacing != 0, nil
 }
 
-func (r *rocksDBWrap) SetPoolHeight(address common.Address, height uint64) error {
-	var key [22]byte
-	copy(key[:2], KeyPrefixPoolHeight)
-	copy(key[2:22], address[:])
-
+func (r *rocksDBWrap) SetPoolHeight(addr common.Address, height uint64) error {
+	key := makePoolHeightKey(addr)
 	return r.db.Set(key[:], uint64ToBytes(height))
 }
 
-func (r *rocksDBWrap) GetPoolHeight(address common.Address) (uint64, error) {
-	var key [22]byte
-	copy(key[:2], KeyPrefixPoolHeight)
-	copy(key[2:22], address[:])
-
+func (r *rocksDBWrap) GetPoolHeight(addr common.Address) (uint64, error) {
+	key := makePoolHeightKey(addr)
 	bytes, err := r.db.Get(key[:])
 	if err != nil {
 		return 0, err
@@ -333,6 +338,46 @@ func (r *rocksDBWrap) SetPoolState(addr common.Address, poolState *PoolState) er
 	for _, ts := range poolState.TickStates {
 		err = r.SetTickState(addr, ts)
 		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (r *rocksDBWrap) DeletePoolState(addr common.Address) error {
+	// Delete pool height
+	heightKey := makePoolHeightKey(addr)
+	if err := r.db.Del(heightKey[:]); err != nil {
+		return err
+	}
+
+	// Delete tick spacing
+	spacingKey := makeTickSpacingKey(addr)
+	if err := r.db.Del(spacingKey[:]); err != nil {
+		return err
+	}
+
+	// Delete current tick
+	tickKey := makeCurrentTickKey(addr)
+	if err := r.db.Del(tickKey[:]); err != nil {
+		return err
+	}
+
+	// Delete all tick states for this pool
+	// Get range from MinTick to MaxTick for this pool address
+	fromKey := GetTickStateKey(addr, MinTick).GetKey()
+	toKey := GetTickStateKey(addr, MaxTick).GetKey()
+
+	// Get all tick state entries in the range
+	entries, err := r.db.GetRange(fromKey, toKey)
+	if err != nil {
+		return err
+	}
+
+	// Delete each tick state entry
+	for _, entry := range entries {
+		if err := r.db.Del(entry.K()); err != nil {
 			return err
 		}
 	}

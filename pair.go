@@ -2,13 +2,14 @@ package main
 
 import (
 	"encoding/json"
+	"time"
+
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/shopspring/decimal"
-	"time"
 )
 
-func IsSameAddress(address1, address2 common.Address) bool {
-	return address1.Cmp(address2) == 0
+func IsSameAddress(addr1, addr2 common.Address) bool {
+	return addr1.Cmp(addr2) == 0
 }
 
 type TokenCore struct {

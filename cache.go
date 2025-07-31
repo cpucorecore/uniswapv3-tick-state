@@ -4,15 +4,16 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
+
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/go-redis/redis/v8"
 	"github.com/patrickmn/go-cache"
 	"go.uber.org/zap"
-	"time"
 )
 
 type PairCache interface {
-	GetPair(address common.Address) (*Pair, bool)
+	GetPair(addr common.Address) (*Pair, bool)
 }
 
 type Cache interface {
@@ -33,12 +34,12 @@ func NewTwoTierCache(redis *redis.Client) Cache {
 	}
 }
 
-func PairCacheKey(address common.Address) string {
-	return fmt.Sprintf("npr:%s", address.Hex())
+func PairCacheKey(addr common.Address) string {
+	return fmt.Sprintf("npr:%s", addr.Hex())
 }
 
-func (c *twoTierCache) GetPair(address common.Address) (*Pair, bool) {
-	k := PairCacheKey(address)
+func (c *twoTierCache) GetPair(addr common.Address) (*Pair, bool) {
+	k := PairCacheKey(addr)
 	pair, ok := c.memory.Get(k)
 	if ok {
 		return pair.(*Pair), true
