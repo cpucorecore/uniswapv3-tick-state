@@ -74,11 +74,9 @@ func (t *TickState) UnmarshalBinary(data []byte) error {
 }
 
 type PoolGlobalState struct {
-	Height       *big.Int `json:"height"`
-	TickSpacing  *big.Int `json:"tickSpacing"`
-	Tick         *big.Int `json:"tick"`
-	Liquidity    *big.Int `json:"liquidity"`
-	SqrtPriceX96 *big.Int `json:"sqrtPriceX96"`
+	Height      *big.Int `json:"height"`
+	TickSpacing *big.Int `json:"tickSpacing"`
+	Tick        *big.Int `json:"tick"`
 }
 
 type Token struct {

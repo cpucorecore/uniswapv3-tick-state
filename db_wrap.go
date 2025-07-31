@@ -321,29 +321,28 @@ func (r *rocksDBWrap) GetPoolState(addr common.Address) (*PoolState, error) {
 }
 
 func (r *rocksDBWrap) SetPoolState(addr common.Address, poolState *PoolState) error {
-	// TODO mutex lock
-	err := r.SetPoolHeight(addr, poolState.Global.Height.Uint64())
-	if err != nil {
-		return err
-	}
+	batch := grocksdb.NewWriteBatch()
+	defer batch.Destroy()
 
-	err = r.SetCurrentTick(addr, int32(poolState.Global.Tick.Int64()))
-	if err != nil {
-		return err
-	}
+	heightKey := makePoolHeightKey(addr)
+	batch.Put(heightKey[:], uint64ToBytes(poolState.Global.Height.Uint64()))
 
-	err = r.SetTickSpacing(addr, int32(poolState.Global.TickSpacing.Int64()))
-	if err != nil {
-		return err
-	}
+	tickKey := makeCurrentTickKey(addr)
+	batch.Put(tickKey[:], int32ToBytes(int32(poolState.Global.Tick.Int64())))
+
+	spacingKey := makeTickSpacingKey(addr)
+	batch.Put(spacingKey[:], int32ToBytes(int32(poolState.Global.TickSpacing.Int64())))
+
 	for _, ts := range poolState.TickStates {
-		err = r.SetTickState(addr, ts)
+		tickStateKey := GetTickStateKey(addr, ts.Tick).GetKey()
+		value, err := ts.MarshalBinary()
 		if err != nil {
 			return err
 		}
+		batch.Put(tickStateKey, value)
 	}
 
-	return nil
+	return r.db.WriteBatch(batch)
 }
 
 func (r *rocksDBWrap) DeletePoolState(addr common.Address) error {
