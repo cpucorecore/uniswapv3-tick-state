@@ -19,6 +19,10 @@ func main() {
 
 	var configFile string
 	flag.StringVar(&configFile, "c", "config.json", "config file")
+
+	var dbPath string
+	flag.StringVar(&dbPath, "db", "", "database path (overrides config file)")
+
 	flag.Parse()
 
 	if showVersion {
@@ -31,9 +35,13 @@ func main() {
 		panic(err)
 	}
 
+	if dbPath != "" {
+		G.RocksDB.DBPath = dbPath
+	}
+
 	ctx := context.Background()
 
-	rocksDB, err := NewRocksDB(".db", &RocksDBOptions{
+	rocksDB, err := NewRocksDB(G.RocksDB.DBPath, &RocksDBOptions{
 		EnableLog:            G.RocksDB.EnableLog,
 		BlockCacheSize:       G.RocksDB.BlockCacheSize,
 		WriteBufferSize:      G.RocksDB.WriteBufferSize,

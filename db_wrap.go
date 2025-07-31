@@ -178,6 +178,7 @@ func (r *rocksDBWrap) GetHeight() (uint64, error) {
 
 var (
 	HeightKey            = []byte("1:")
+	KeyPrefixTickState   = []byte("2:")
 	KeyPrefixCurrentTick = []byte("3:")
 	KeyPrefixTickSpacing = []byte("4:")
 	KeyPrefixPoolHeight  = []byte("5:")

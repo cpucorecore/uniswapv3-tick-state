@@ -5,24 +5,11 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 )
 
-func GetPoolStateFromDBOrContractCaller(db DB, cc *ContractCaller, addr common.Address) (*PoolState, error) {
-	ok, err := db.PoolExists(addr)
-	if err != nil || !ok {
-		poolState, err := cc.GetPoolState(addr)
-		if err != nil {
-			return nil, err
-		}
-
-		err = db.SetPoolState(addr, poolState)
-		if err != nil {
-			return nil, err
-		}
-
-		return poolState, nil
-	}
-
-	return db.GetPoolState(addr)
-}
+var (
+	ErrPairNotFound = errors.New("no pair info")
+	ErrPairFiltered = errors.New("pair is filtered")
+	ErrNotV3Pool    = errors.New("not a v3 pool")
+)
 
 type PoolStateGetter interface {
 	GetPoolState(addr common.Address) (*PoolState, error)
@@ -42,12 +29,6 @@ func NewPoolStateGetter(cache Cache, db DB, url string) PoolStateGetter {
 		contractCaller: contractCaller,
 	}
 }
-
-var (
-	ErrPairNotFound = errors.New("no pair info")
-	ErrPairFiltered = errors.New("pair is filtered")
-	ErrNotV3Pool    = errors.New("not a v3 pool")
-)
 
 func decoratePoolState(poolState *PoolState, pair *Pair) *PoolState {
 	poolState.Token0 = &Token{

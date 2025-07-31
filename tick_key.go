@@ -9,10 +9,6 @@ const (
 	TickStateKeyLen = 26
 )
 
-var (
-	TickStateKeyPrefix = []byte("2:")
-)
-
 type TickStateKey [TickStateKeyLen]byte
 
 func (k *TickStateKey) setBytes(b []byte) {
@@ -33,7 +29,7 @@ func (k TickStateKey) GetKey() []byte {
 
 func GetTickStateKey(addr common.Address, tick int32) TickStateKey {
 	var key TickStateKey
-	copy(key[:2], TickStateKeyPrefix)
+	copy(key[:2], KeyPrefixTickState)
 	copy(key[2:22], addr[:])
 	copy(key[22:], int32ToOrderedBytes(tick))
 	return key

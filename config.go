@@ -33,6 +33,7 @@ type RocksDBConf struct {
 	BlockCacheSize       uint64 `json:"block_cache_size"`
 	WriteBufferSize      uint64 `json:"write_buffer_size"`
 	MaxWriteBufferNumber int    `json:"max_write_buffer_number"`
+	DBPath               string `json:"db_path"`
 }
 
 type Config struct {
@@ -69,6 +70,7 @@ var (
 			BlockCacheSize:       uint64(1024 * 1024 * 1024 * 1), // 1GB
 			WriteBufferSize:      uint64(1024 * 1024 * 128),      // 128MB
 			MaxWriteBufferNumber: 2,
+			DBPath:               ".db",
 		},
 	}
 

@@ -193,6 +193,12 @@ http://192.168.100.16:29292/pool_state?address=0x172fcD41E0913e95784454622d1c372
 
 # 指定配置文件
 ./uniswapv3-tick-state -c config.json
+
+# 指定数据库路径（覆盖配置文件中的设置）
+./uniswapv3-tick-state -db /path/to/database
+
+# 同时指定配置文件和数据库路径
+./uniswapv3-tick-state -c config.json -db /path/to/database
 ```
 
 ### 配置文件格式
@@ -240,7 +246,8 @@ http://192.168.100.16:29292/pool_state?address=0x172fcD41E0913e95784454622d1c372
   "enable_log": true,                    // 是否启用RocksDB日志
   "block_cache_size": 1073741824,        // 块缓存大小（字节），默认1GB
   "write_buffer_size": 134217728,        // 写缓冲区大小（字节），默认128MB
-  "max_write_buffer_number": 2           // 最大写缓冲区数量
+  "max_write_buffer_number": 2,          // 最大写缓冲区数量
+  "db_path": ".db"                       // 数据库路径，默认为当前目录下的.db
 }
 ```
 

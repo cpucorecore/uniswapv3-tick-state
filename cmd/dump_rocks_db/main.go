@@ -11,7 +11,7 @@ import (
 
 func main() {
 	var dbPath string
-	flag.StringVar(&dbPath, "db", "/Users/sky/GolandProjects/uniswapv3-tick-state/.db", "RocksDB path")
+	flag.StringVar(&dbPath, "db", "/tmp/.db", "RocksDB path")
 	flag.Parse()
 
 	opts := grocksdb.NewDefaultOptions()
