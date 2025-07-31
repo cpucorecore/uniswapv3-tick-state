@@ -6,6 +6,7 @@ import (
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/linxGnu/grocksdb"
 )
 
 var (
@@ -346,41 +347,21 @@ func (r *rocksDBWrap) SetPoolState(addr common.Address, poolState *PoolState) er
 }
 
 func (r *rocksDBWrap) DeletePoolState(addr common.Address) error {
-	// Delete pool height
+	batch := grocksdb.NewWriteBatch()
+	defer batch.Destroy()
+
 	heightKey := makePoolHeightKey(addr)
-	if err := r.db.Del(heightKey[:]); err != nil {
-		return err
-	}
+	batch.Delete(heightKey[:])
 
-	// Delete tick spacing
 	spacingKey := makeTickSpacingKey(addr)
-	if err := r.db.Del(spacingKey[:]); err != nil {
-		return err
-	}
+	batch.Delete(spacingKey[:])
 
-	// Delete current tick
 	tickKey := makeCurrentTickKey(addr)
-	if err := r.db.Del(tickKey[:]); err != nil {
-		return err
-	}
+	batch.Delete(tickKey[:])
 
-	// Delete all tick states for this pool
-	// Get range from MinTick to MaxTick for this pool address
-	fromKey := GetTickStateKey(addr, MinTick).GetKey()
-	toKey := GetTickStateKey(addr, MaxTick).GetKey()
+	startKey := GetTickStateKey(addr, MinTick).GetKey()
+	endKey := GetTickStateKey(addr, MaxTick).GetKey()
+	batch.DeleteRange(startKey, endKey)
 
-	// Get all tick state entries in the range
-	entries, err := r.db.GetRange(fromKey, toKey)
-	if err != nil {
-		return err
-	}
-
-	// Delete each tick state entry
-	for _, entry := range entries {
-		if err := r.db.Del(entry.K()); err != nil {
-			return err
-		}
-	}
-
-	return nil
+	return r.db.WriteBatch(batch)
 }

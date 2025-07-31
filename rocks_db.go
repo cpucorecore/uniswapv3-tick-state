@@ -151,11 +151,6 @@ func (r *RocksDB) GetRange(from, to []byte) ([]KVEntry, error) {
 	return result, nil
 }
 
-func (r *RocksDB) SetBatch(kvEntries []KVEntry) error {
-	batch := grocksdb.NewWriteBatch()
-	defer batch.Destroy()
-	for _, entry := range kvEntries {
-		batch.Put(entry.K(), entry.V())
-	}
+func (r *RocksDB) WriteBatch(batch *grocksdb.WriteBatch) error {
 	return r.db.Write(r.wo, batch)
 }

@@ -56,7 +56,7 @@ func (r *eventReactor) ReactBlockEvent(blockEvent *BlockEvent) error {
 			continue
 		}
 
-		if err := r.reactEvent(e); err != nil {
+		if err = r.reactEvent(e); err != nil {
 			return err
 		}
 
