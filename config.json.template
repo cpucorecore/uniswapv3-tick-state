@@ -2,7 +2,8 @@
     "log": {
         "async": false,
         "buffer_size": 1000000,
-        "flush_interval": 1
+        "flush_interval": 1,
+        "level": "info"
     },
     "eth_rpc": {
         "http": "https://bsc-dataseed.binance.org/",

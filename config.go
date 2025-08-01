@@ -6,9 +6,10 @@ import (
 )
 
 type LogConf struct {
-	Async         bool `json:"async"`
-	BufferSize    int  `json:"buffer_size"`
-	FlushInterval int  `json:"flush_interval"`
+	Async         bool   `json:"async"`
+	BufferSize    int    `json:"buffer_size"`
+	FlushInterval int    `json:"flush_interval"`
+	Level         string `json:"level"`
 }
 
 type EthRPCConf struct {
@@ -50,6 +51,7 @@ var (
 			Async:         false,
 			BufferSize:    1000000,
 			FlushInterval: 1,
+			Level:         "info",
 		},
 		EthRPC: &EthRPCConf{
 			HTTP:    "https://bsc-dataseed.binance.org/",

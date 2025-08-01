@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"os"
@@ -34,10 +35,15 @@ func InitLogger() {
 	encoderConfig := zap.NewProductionEncoderConfig()
 	encoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
 
+	logLevel, err := zapcore.ParseLevel(G.Log.Level)
+	if err != nil {
+		panic(fmt.Sprintf("log level error: %v, level:[%s]", err, G.Log.Level))
+	}
+
 	core := zapcore.NewCore(
 		zapcore.NewJSONEncoder(encoderConfig),
 		writeSyncer,
-		zapcore.DebugLevel,
+		logLevel,
 	)
 
 	Log = zap.New(core)

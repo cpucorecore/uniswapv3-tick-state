@@ -30,6 +30,8 @@ func IsIgnorantError(err error) bool {
 }
 
 func (r *eventReactor) ReactBlockEvent(blockEvent *BlockEvent) error {
+	Log.Debug("ReactBlockEvent begin", zap.Any("height", blockEvent.Height))
+
 	for _, event := range blockEvent.Events {
 		height, err := r.db.GetHeight(event.Address)
 		if err != nil {
@@ -93,16 +95,16 @@ func (r *eventReactor) reactEvent(event *Event) error {
 	case EventTypeMint:
 		r.reactTick(event.Address, int32(event.TickLower.Int64()), event.Amount)
 		r.reactTick(event.Address, int32(event.TickUpper.Int64()), new(big.Int).Neg(event.Amount))
-		Log.Info("Mint Event", zap.String("addr", event.Address.String()))
+		Log.Debug("Mint Event", zap.String("addr", event.Address.String()))
 
 	case EventTypeBurn:
 		r.reactTick(event.Address, int32(event.TickLower.Int64()), new(big.Int).Neg(event.Amount))
 		r.reactTick(event.Address, int32(event.TickUpper.Int64()), event.Amount)
-		Log.Info("Burn Event", zap.String("addr", event.Address.String()))
+		Log.Debug("Burn Event", zap.String("addr", event.Address.String()))
 
 	case EventTypeSwap:
 		r.db.SetCurrentTick(event.Address, int32(event.Tick.Int64()))
-		Log.Info("Swap Event", zap.String("addr", event.Address.String()))
+		Log.Debug("Swap Event", zap.String("addr", event.Address.String()))
 
 	default:
 		panic(fmt.Sprintf("wrong event: %v", event.Type))

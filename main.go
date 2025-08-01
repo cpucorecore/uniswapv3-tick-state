@@ -35,6 +35,8 @@ func main() {
 		panic(err)
 	}
 
+	InitLogger()
+
 	if dbPath != "" {
 		G.RocksDB.DBPath = dbPath
 	}
