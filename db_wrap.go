@@ -56,7 +56,7 @@ type DB interface {
 	GetPoolState(addr common.Address) (*PoolState, error)
 	SetPoolState(addr common.Address, poolTicks *PoolState) error
 	DeletePoolState(addr common.Address) error
-	
+
 	Close()
 }
 

@@ -51,6 +51,7 @@ func main() {
 		panic(err)
 	}
 	db := NewDB(rocksDB)
+	db = NewSafeDB(db)
 
 	redisCli := redis.NewClient(&redis.Options{
 		Addr:     G.Redis.Addr,
@@ -93,7 +94,6 @@ func main() {
 		dispatcher.Stop()
 	}()
 
-	Log.Info("waiting for retirement...")
 	wg.Wait()
-	Log.Info("now retire")
+	Log.Info("done")
 }
