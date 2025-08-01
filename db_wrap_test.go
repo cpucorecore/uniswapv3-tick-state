@@ -2,7 +2,6 @@ package main
 
 import (
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/stretchr/testify/require"
 	"math/big"
 	"testing"
 )
@@ -40,33 +39,15 @@ func Test_SetTickState_GetTickState_PositiveNegative(t *testing.T) {
 	}
 }
 
-func Test_GetTickStates_PositiveNegative(t *testing.T) {
-	repo := newTestRepo(t)
-	defer repo.Close()
-	addr := common.HexToAddress("0x2000000000000000000000000000000000000002")
-	for _, tick := range []int32{-200, -100, 0, 100, 200} {
-		ts := &TickState{Tick: tick, LiquidityNet: big.NewInt(int64(tick))}
-		_ = repo.SetTickState(addr, ts)
-	}
-	states, err := repo.GetTickStates(addr, 0, 201)
-	if err != nil || len(states) == 0 {
-		t.Fatalf("GetTickStates (pos) failed or empty")
-	}
-	states, err = repo.GetTickStates(addr, -201, 0)
-	if err != nil || len(states) == 0 {
-		t.Fatalf("GetTickStates (neg) failed or empty")
-	}
-}
-
 func Test_GetPoolTicks_PositiveNegative(t *testing.T) {
 	repo := newTestRepo(t)
 	defer repo.Close()
 	addr := common.HexToAddress("0x4000000000000000000000000000000000000004")
 	_ = repo.SetTickState(addr, &TickState{Tick: 10, LiquidityNet: big.NewInt(10)})
 	_ = repo.SetTickState(addr, &TickState{Tick: -10, LiquidityNet: big.NewInt(-10)})
-	states, err := repo.GetAllTickStates(addr)
+	states, err := repo.GetTickStates(addr)
 	if err != nil || len(states) != 2 {
-		t.Fatalf("GetAllTickStates failed or empty")
+		t.Fatalf("GetTickStates failed or empty")
 	}
 }
 
@@ -104,24 +85,6 @@ func Test_SetGetTickSpacing_PositiveNegative(t *testing.T) {
 			t.Fatalf("GetTickSpacing: want %d, got %d", v, v2)
 		}
 	}
-}
-
-func Test_PoolExists_PositiveNegative(t *testing.T) {
-	repo := newTestRepo(t)
-	defer repo.Close()
-
-	addr := common.HexToAddress("0x7000000000000000000000000000000000000007")
-	err := repo.SetTickSpacing(addr, 10)
-	require.Nil(t, err, err)
-
-	ok, err := repo.PoolExists(addr)
-	require.Nil(t, err, err)
-	require.True(t, ok, "PoolExists: should exist")
-
-	addr2 := common.HexToAddress("0x7000000000000000000000000000000000000008")
-	exist, err := repo.PoolExists(addr2)
-	require.Nil(t, err)
-	require.False(t, exist, "PoolExists: should not exist")
 }
 
 func Test_SetGetPoolHeight(t *testing.T) {

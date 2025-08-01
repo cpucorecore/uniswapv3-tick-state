@@ -1,7 +1,6 @@
 package main
 
 import (
-	"errors"
 	"fmt"
 	"strconv"
 	"time"
@@ -101,8 +100,6 @@ func (r *RocksDB) Close() {
 	r.db.Close()
 }
 
-var ErrKeyNotFound = errors.New("key not found")
-
 func (r *RocksDB) Get(key []byte) ([]byte, error) {
 	slice, err := r.db.Get(r.ro, key)
 	if err != nil {
@@ -111,7 +108,7 @@ func (r *RocksDB) Get(key []byte) ([]byte, error) {
 	defer slice.Free()
 
 	if !slice.Exists() {
-		return nil, ErrKeyNotFound
+		return nil, nil
 	}
 
 	return append([]byte{}, slice.Data()...), nil

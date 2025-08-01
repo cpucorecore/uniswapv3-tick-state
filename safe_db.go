@@ -66,18 +66,11 @@ func (s *SafeDB) GetTickState(addr common.Address, tick int32) (*TickState, erro
 	return s.db.GetTickState(addr, tick)
 }
 
-func (s *SafeDB) GetTickStates(addr common.Address, fromTick, toTick int32) ([]*TickState, error) {
+func (s *SafeDB) GetTickStates(addr common.Address) ([]*TickState, error) {
 	lock := s.getOrCreateLock(addr)
 	lock.RLock()
 	defer lock.RUnlock()
-	return s.db.GetTickStates(addr, fromTick, toTick)
-}
-
-func (s *SafeDB) GetAllTickStates(addr common.Address) ([]*TickState, error) {
-	lock := s.getOrCreateLock(addr)
-	lock.RLock()
-	defer lock.RUnlock()
-	return s.db.GetAllTickStates(addr)
+	return s.db.GetTickStates(addr)
 }
 
 func (s *SafeDB) SetCurrentTick(addr common.Address, tick int32) error {
@@ -106,13 +99,6 @@ func (s *SafeDB) GetTickSpacing(addr common.Address) (int32, error) {
 	lock.RLock()
 	defer lock.RUnlock()
 	return s.db.GetTickSpacing(addr)
-}
-
-func (s *SafeDB) PoolExists(addr common.Address) (bool, error) {
-	lock := s.getOrCreateLock(addr)
-	lock.RLock()
-	defer lock.RUnlock()
-	return s.db.PoolExists(addr)
 }
 
 func (s *SafeDB) SetHeight(addr common.Address, height uint64) error {

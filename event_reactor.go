@@ -30,38 +30,36 @@ func IsIgnorantError(err error) bool {
 }
 
 func (r *eventReactor) ReactBlockEvent(blockEvent *BlockEvent) error {
-	for _, e := range blockEvent.Events {
-		exist, err := r.db.PoolExists(e.Address)
+	for _, event := range blockEvent.Events {
+		height, err := r.db.GetHeight(event.Address)
 		if err != nil {
-			Log.Fatal("PoolExists error", zap.String("addr", e.Address.String()), zap.Error(err)) // TODO check Fatal?
+			return err
 		}
 
-		if !exist {
-			_, err = r.poolStateGetter.GetPoolState(e.Address)
+		if height == 0 {
+			poolState, err := r.poolStateGetter.GetPoolState(event.Address)
 			if err != nil {
-				Log.Info("GetPoolState error", zap.String("addr", e.Address.String()), zap.Error(err))
 				if IsIgnorantError(err) {
 					continue
 				}
+
 				return err
 			}
-		}
-
-		height, err := r.db.GetHeight(e.Address)
-		if err != nil {
-			Log.Fatal("GetHeight error", zap.String("addr", e.Address.String()), zap.Error(err)) // TODO check Fatal?
+			height = poolState.Global.Height.Uint64()
 		}
 
 		if height >= blockEvent.Height {
 			continue
 		}
 
-		if err = r.reactEvent(e); err != nil {
+		if err = r.reactEvent(event); err != nil {
 			return err
 		}
 
-		r.db.SetHeight(e.Address, blockEvent.Height) // TODO once per block
+		r.db.SetHeight(event.Address, blockEvent.Height)
 	}
+
+	Log.Info("ReactBlockEvent end", zap.Any("height", blockEvent.Height))
 	return r.db.SetFinishHeight(blockEvent.Height)
 }
 
@@ -113,10 +111,6 @@ func (r *eventReactor) reactEvent(event *Event) error {
 	return nil
 }
 
-func IsNotExist(err error) bool {
-	return errors.Is(err, ErrKeyNotFound)
-}
-
 func (r *eventReactor) reactTick(addr common.Address, tick int32, amount *big.Int) error {
 	tickState := r.getOrNewTickState(addr, tick)
 	tickState.AddLiquidity(amount)
@@ -126,11 +120,11 @@ func (r *eventReactor) reactTick(addr common.Address, tick int32, amount *big.In
 func (r *eventReactor) getOrNewTickState(addr common.Address, tick int32) *TickState {
 	tickState, err := r.db.GetTickState(addr, tick)
 	if err != nil {
-		if IsNotExist(err) {
-			return NewTickState(tick)
-		} else {
-			panic(fmt.Sprintf("GetTickState err: addr=%v,tick=%d, err=%v", addr.String(), tick, err))
-		}
+		panic(fmt.Sprintf("GetTickState err: addr=%v,tick=%d, err=%v", addr.String(), tick, err))
+	}
+
+	if tickState == nil {
+		return NewTickState(tick)
 	}
 
 	return tickState

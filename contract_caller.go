@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"errors"
-	"fmt"
 	"math/big"
 	"strings"
 	"time"
@@ -90,7 +89,6 @@ func (c *ContractCaller) GetPoolState(addr common.Address) (*PoolState, error) {
 		Data:    data,
 	}
 
-	Log.Info(fmt.Sprintf("Calling getAllTicks: %s", req))
 	bytes, err := c.CallContract(context.Background(), req)
 	if err != nil {
 		return nil, err

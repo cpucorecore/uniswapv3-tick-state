@@ -109,10 +109,10 @@ func TestGetTicks(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	ticks, err := r.GetTickStates(addr, tn2, t3)
+	tickStates, err := r.GetTickStates(addr)
 	require.NoError(t, err)
-	require.Len(t, ticks, 5, "should retrieve 5 ticks")
-	for i, tick := range ticks {
+	require.Len(t, tickStates, 5, "should retrieve 5 tickStates")
+	for i, tick := range tickStates {
 		require.True(t, tick.Equal(tickTests[i].expectTickState), "tick state should match")
 	}
 }

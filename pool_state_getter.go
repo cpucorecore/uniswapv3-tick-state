@@ -60,17 +60,16 @@ func (g *poolStateGetter) GetPoolState(addr common.Address) (*PoolState, error) 
 		return nil, ErrNotV3Pool
 	}
 
-	ok, err := g.db.PoolExists(addr)
-	if ok && err == nil {
-		poolState, err := g.db.GetPoolState(addr)
-		if err != nil {
-			return nil, err
-		}
+	poolState, err := g.db.GetPoolState(addr)
+	if err != nil {
+		return nil, err
+	}
 
+	if poolState != nil {
 		return decoratePoolState(poolState, pair), nil
 	}
 
-	poolState, err := g.contractCaller.GetPoolState(addr)
+	poolState, err = g.contractCaller.GetPoolState(addr)
 	if err != nil {
 		return nil, err
 	}
