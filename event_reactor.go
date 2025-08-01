@@ -47,9 +47,9 @@ func (r *eventReactor) ReactBlockEvent(blockEvent *BlockEvent) error {
 			}
 		}
 
-		height, err := r.db.GetPoolHeight(e.Address)
+		height, err := r.db.GetHeight(e.Address)
 		if err != nil {
-			Log.Fatal("GetPoolHeight error", zap.String("addr", e.Address.String()), zap.Error(err)) // TODO check Fatal?
+			Log.Fatal("GetHeight error", zap.String("addr", e.Address.String()), zap.Error(err)) // TODO check Fatal?
 		}
 
 		if height >= blockEvent.Height {
@@ -60,9 +60,9 @@ func (r *eventReactor) ReactBlockEvent(blockEvent *BlockEvent) error {
 			return err
 		}
 
-		r.db.SetPoolHeight(e.Address, blockEvent.Height) // TODO once per block
+		r.db.SetHeight(e.Address, blockEvent.Height) // TODO once per block
 	}
-	return r.db.SetHeight(blockEvent.Height)
+	return r.db.SetFinishHeight(blockEvent.Height)
 }
 
 func (r *eventReactor) PutInput(blockEvent *BlockEvent) {

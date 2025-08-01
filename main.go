@@ -69,7 +69,7 @@ func main() {
 	parser := NewBlockParser()
 	parser.MountOutput(reactor)
 
-	finishedHeight, err := db.GetHeight()
+	finishedHeight, err := db.GetFinishHeight()
 	if err != nil {
 		Log.Fatal("failed to get finished height", zap.Error(err))
 	}

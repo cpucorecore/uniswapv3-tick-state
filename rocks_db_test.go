@@ -31,13 +31,13 @@ func TestGetSetHeight(t *testing.T) {
 	defer db.Close()
 
 	dbw := NewDB(db)
-	height, err := dbw.GetHeight()
+	height, err := dbw.GetFinishHeight()
 	require.NoError(t, err)
 	require.Equal(t, uint64(0), height)
 
 	testHeight := uint64(1000)
-	require.NoError(t, dbw.SetHeight(testHeight))
-	height, err = dbw.GetHeight()
+	require.NoError(t, dbw.SetFinishHeight(testHeight))
+	height, err = dbw.GetFinishHeight()
 	require.NoError(t, err)
 	require.Equal(t, testHeight, height)
 }

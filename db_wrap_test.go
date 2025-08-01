@@ -64,9 +64,9 @@ func Test_GetPoolTicks_PositiveNegative(t *testing.T) {
 	addr := common.HexToAddress("0x4000000000000000000000000000000000000004")
 	_ = repo.SetTickState(addr, &TickState{Tick: 10, LiquidityNet: big.NewInt(10)})
 	_ = repo.SetTickState(addr, &TickState{Tick: -10, LiquidityNet: big.NewInt(-10)})
-	states, err := repo.GetPoolTickStates(addr)
+	states, err := repo.GetAllTickStates(addr)
 	if err != nil || len(states) != 2 {
-		t.Fatalf("GetPoolTickStates failed or empty")
+		t.Fatalf("GetAllTickStates failed or empty")
 	}
 }
 
@@ -129,15 +129,15 @@ func Test_SetGetPoolHeight(t *testing.T) {
 	defer repo.Close()
 	addr := common.HexToAddress("0x8000000000000000000000000000000000000008")
 	for _, h := range []uint64{123456, 0} {
-		if err := repo.SetPoolHeight(addr, h); err != nil {
-			t.Fatalf("SetPoolHeight failed: %v", err)
+		if err := repo.SetHeight(addr, h); err != nil {
+			t.Fatalf("SetHeight failed: %v", err)
 		}
-		h2, err := repo.GetPoolHeight(addr)
+		h2, err := repo.GetHeight(addr)
 		if err != nil {
-			t.Fatalf("GetPoolHeight failed: %v", err)
+			t.Fatalf("GetHeight failed: %v", err)
 		}
 		if h != h2 {
-			t.Fatalf("GetPoolHeight: want %d, got %d", h, h2)
+			t.Fatalf("GetHeight: want %d, got %d", h, h2)
 		}
 	}
 }
@@ -146,15 +146,15 @@ func Test_SetGetHeight(t *testing.T) {
 	repo := newTestRepo(t)
 	defer repo.Close()
 	for _, h := range []uint64{987654321, 0} {
-		if err := repo.SetHeight(h); err != nil {
-			t.Fatalf("SetHeight failed: %v", err)
+		if err := repo.SetFinishHeight(h); err != nil {
+			t.Fatalf("SetFinishHeight failed: %v", err)
 		}
-		h2, err := repo.GetHeight()
+		h2, err := repo.GetFinishHeight()
 		if err != nil {
-			t.Fatalf("GetHeight failed: %v", err)
+			t.Fatalf("GetFinishHeight failed: %v", err)
 		}
 		if h != h2 {
-			t.Fatalf("GetHeight: want %d, got %d", h, h2)
+			t.Fatalf("GetFinishHeight: want %d, got %d", h, h2)
 		}
 	}
 }
