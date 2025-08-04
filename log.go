@@ -16,7 +16,6 @@ func init() {
 
 func InitLoggerForTest() {
 	Log, _ = zap.NewDevelopment()
-	return
 }
 
 func InitLogger() {

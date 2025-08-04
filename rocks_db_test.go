@@ -8,14 +8,6 @@ import (
 	"testing"
 )
 
-type testEntry struct {
-	k []byte
-	v []byte
-}
-
-func (e *testEntry) K() []byte { return e.k }
-func (e *testEntry) V() []byte { return e.v }
-
 func TestGetSetHeight(t *testing.T) {
 	dir := t.TempDir()
 	dbPath := filepath.Join(dir, "testdb")

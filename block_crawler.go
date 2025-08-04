@@ -2,12 +2,13 @@ package main
 
 import (
 	"context"
+	"sync"
+
 	"github.com/avast/retry-go/v4"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/panjf2000/ants/v2"
 	"go.uber.org/zap"
-	"sync"
 )
 
 type BlockCrawlerWorker interface {
@@ -78,17 +79,13 @@ func (c *blockCrawler) getBlockRetry(ctx context.Context, height uint64) (*Block
 
 func (c *blockCrawler) startCommitOutput() {
 	go func() {
-		for {
-			select {
-			case blockReceipt, ok := <-c.outputBuffer:
-				if !ok {
-					Log.Info("no more block receipt")
-					c.blockReceiptReceiver.FinInput()
-					return
-				}
+		defer func() {
+			Log.Info("no more block receipt")
+			c.blockReceiptReceiver.FinInput()
+		}()
 
-				c.blockReceiptReceiver.PutInput(blockReceipt)
-			}
+		for blockReceipt := range c.outputBuffer {
+			c.blockReceiptReceiver.PutInput(blockReceipt)
 		}
 	}()
 }
@@ -98,27 +95,18 @@ func (c *blockCrawler) Start(ctx context.Context) {
 
 	go func() {
 		wg := &sync.WaitGroup{}
-	tagFor:
-		for {
-			select {
-			case height, ok := <-c.inputQueue:
-				if !ok {
-					Log.Info("no more task")
-					break tagFor
+		for height := range c.inputQueue {
+			wg.Add(1)
+			c.pool.Submit(func() {
+				defer wg.Done()
+				blockReceipt, err := c.getBlockRetry(ctx, height)
+				if err != nil {
+					Log.Error("get block err", zap.Uint64("headerHeight", height), zap.Error(err))
+					return
 				}
-
-				wg.Add(1)
-				c.pool.Submit(func() {
-					defer wg.Done()
-					blockReceipt, err := c.getBlockRetry(ctx, height)
-					if err != nil {
-						Log.Error("get block err", zap.Uint64("headerHeight", height), zap.Error(err))
-						return
-					}
-					Log.Info("get block success", zap.Uint64("headerHeight", height))
-					c.outputSequencer.Commit(blockReceipt, c.outputBuffer)
-				})
-			}
+				Log.Info("get block success", zap.Uint64("headerHeight", height))
+				c.outputSequencer.Commit(blockReceipt, c.outputBuffer)
+			})
 		}
 
 		wg.Wait()

@@ -65,7 +65,8 @@ const (
 )
 
 func (c *ContractCaller) CallContract(ctx context.Context, req *CallContractReq) ([]byte, error) {
-	ctxWithTimeout, _ := context.WithTimeout(ctx, timeoutDuration)
+	ctxWithTimeout, cancel := context.WithTimeout(ctx, timeoutDuration)
+	defer cancel()
 	return retry.DoWithData(func() ([]byte, error) {
 		return c.callContract(ctx, req)
 	}, infiniteAttempts, retryDelay, retry.Context(ctxWithTimeout))
