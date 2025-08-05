@@ -3,10 +3,11 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"math/big"
+
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
-	"math/big"
 )
 
 type BlockReceipt struct {
@@ -80,6 +81,7 @@ type PoolGlobalState struct {
 }
 
 type Token struct {
+	Address  common.Address
 	Symbol   string
 	Decimals int8
 }
@@ -98,6 +100,10 @@ func (s *PoolState) String() string {
 func (s *PoolState) Json() []byte {
 	bytes, _ := json.Marshal(s)
 	return bytes
+}
+
+func (s *PoolState) IsMonitor() bool {
+	return IsMonitorPool(s.Token0.Address, s.Token1.Address)
 }
 
 type CallContractReq struct {

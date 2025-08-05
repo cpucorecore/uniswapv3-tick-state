@@ -15,7 +15,8 @@ type APIServer interface {
 }
 
 type apiServer struct {
-	poolStateGetter PoolStateGetter
+	poolStateGetter   PoolStateGetter
+	arbitrageAnalyzer *ArbitrageAnalyzer
 }
 
 func parseParams(r *http.Request, requiredParams []string) (map[string]string, error) {
@@ -151,9 +152,40 @@ func (a *apiServer) HandlerPoolState(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (a *apiServer) HandlerArbitrageCheck(w http.ResponseWriter, r *http.Request) {
+	pool1Addr := r.URL.Query().Get("pool1")
+	pool2Addr := r.URL.Query().Get("pool2")
+
+	if pool1Addr == "" || pool2Addr == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("missing parameter: pool1 or pool2"))
+		return
+	}
+
+	pool1 := common.HexToAddress(pool1Addr)
+	pool2 := common.HexToAddress(pool2Addr)
+
+	analysis, err := a.arbitrageAnalyzer.AnalyzeArbitrage(pool1, pool2)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(fmt.Sprintf("analyze arbitrage error: %v", err)))
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	jsonData, err := json.Marshal(analysis)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("json marshal error"))
+		return
+	}
+	w.Write(jsonData)
+}
+
 func (a *apiServer) Start() {
 	go func() {
 		http.HandleFunc("/pool_state", a.HandlerPoolState)
+		http.HandleFunc("/arbitrage_check", a.HandlerArbitrageCheck)
 		err := http.ListenAndServe(":29292", nil)
 		if err != nil {
 			panic(err)
@@ -163,6 +195,7 @@ func (a *apiServer) Start() {
 
 func NewAPIServer(poolStateGetter PoolStateGetter) APIServer {
 	return &apiServer{
-		poolStateGetter: poolStateGetter,
+		poolStateGetter:   poolStateGetter,
+		arbitrageAnalyzer: NewArbitrageAnalyzer(poolStateGetter),
 	}
 }

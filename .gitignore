@@ -7,3 +7,7 @@ uniswapv3-tick-state
 venv
 __pycache__
 .vscode
+arbitrage_report.html
+arbitrage_report.json
+*.csv
+*.txt

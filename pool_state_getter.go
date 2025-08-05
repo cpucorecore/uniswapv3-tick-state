@@ -32,10 +32,12 @@ func NewPoolStateGetter(cache Cache, db DB, url string) PoolStateGetter {
 
 func decoratePoolState(poolState *PoolState, pair *Pair) *PoolState {
 	poolState.Token0 = &Token{
+		Address:  pair.Token0Core.Address,
 		Symbol:   pair.Token0Core.Symbol,
 		Decimals: pair.Token0Core.Decimals,
 	}
 	poolState.Token1 = &Token{
+		Address:  pair.Token1Core.Address,
 		Symbol:   pair.Token1Core.Symbol,
 		Decimals: pair.Token1Core.Decimals,
 	}
