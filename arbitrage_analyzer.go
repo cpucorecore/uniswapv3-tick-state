@@ -37,6 +37,7 @@ type ArbitrageAnalysis struct {
 	RecommendedAction string     `json:"recommended_action"`
 	TradeDirection    string     `json:"trade_direction"`
 	EstimatedGasCost  *big.Float `json:"estimated_gas_cost"`
+	Error             string     `json:"error,omitempty"` // 新增：分析过程中的错误信息
 }
 
 type ArbitrageAnalyzer struct {
@@ -49,26 +50,37 @@ func NewArbitrageAnalyzer(poolStateGetter PoolStateGetter) *ArbitrageAnalyzer {
 	}
 }
 
-func (aa *ArbitrageAnalyzer) AnalyzeArbitrage(pool1Addr, pool2Addr common.Address) (*ArbitrageAnalysis, error) {
+func (aa *ArbitrageAnalyzer) AnalyzeArbitrage(pool1Addr, pool2Addr common.Address) *ArbitrageAnalysis {
+	var analysis ArbitrageAnalysis
+	analysis.Pool1Address = pool1Addr
+	analysis.Pool2Address = pool2Addr
+	analysis.Timestamp = time.Now()
+
 	pool1State, err := aa.poolStateGetter.GetPoolState(pool1Addr)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get pool1 state: %v", err)
+		analysis.Error = "failed to get pool1 state: " + err.Error()
+		return &analysis
 	}
 	if !pool1State.IsUSDPool() {
-		return nil, fmt.Errorf("pool1 have no usd token")
+		analysis.Error = "pool1 have no usd token"
+		return &analysis
 	}
 	if pool1State.IsEmptyTicks() {
-		return nil, fmt.Errorf("poo1 have no ticks")
+		analysis.Error = "poo1 have no ticks"
+		return &analysis
 	}
 	pool2State, err := aa.poolStateGetter.GetPoolState(pool2Addr)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get pool2 state: %v", err)
+		analysis.Error = "failed to get pool2 state: " + err.Error()
+		return &analysis
 	}
 	if !pool2State.IsUSDPool() {
-		return nil, fmt.Errorf("pool1 have no usd token")
+		analysis.Error = "pool2 have no usd token"
+		return &analysis
 	}
 	if pool2State.IsEmptyTicks() {
-		return nil, fmt.Errorf("poo2 have no ticks")
+		analysis.Error = "poo2 have no ticks"
+		return &analysis
 	}
 
 	pool1Tick := int32(pool1State.Global.Tick.Int64())
@@ -148,27 +160,24 @@ func (aa *ArbitrageAnalyzer) AnalyzeArbitrage(pool1Addr, pool2Addr common.Addres
 	recommendedAction := aa.generateRecommendation(priceDiffPercent, riskLevel, maxProfit)
 	estimatedGasCost := big.NewFloat(20)
 
-	return &ArbitrageAnalysis{
-		Timestamp:           time.Now(),
-		Pool1Address:        pool1Addr,
-		Pool2Address:        pool2Addr,
-		Pool1PriceUSD:       pool1PriceUSD,
-		Pool2PriceUSD:       pool2PriceUSD,
-		PriceDiff:           priceDiff,
-		PriceDiffPercent:    priceDiffPercent,
-		OptimalTradeSizeUSD: optimalTradeSizeUSD,
-		NonUSDTokenSymbol:   nonUSDTokenSymbol,
-		NonUSDTokenAmount:   optimalTradeSize,
-		MaxProfit:           maxProfit,
-		ProfitPercentage:    profitPercentage,
-		RiskLevel:           riskLevel,
-		Pool1Liquidity:      pool1Liquidity,
-		Pool2Liquidity:      pool2Liquidity,
-		LiquidityRatio:      liquidityRatio,
-		RecommendedAction:   recommendedAction,
-		TradeDirection:      tradeDirection,
-		EstimatedGasCost:    estimatedGasCost,
-	}, nil
+	analysis.Pool1PriceUSD = pool1PriceUSD
+	analysis.Pool2PriceUSD = pool2PriceUSD
+	analysis.PriceDiff = priceDiff
+	analysis.PriceDiffPercent = priceDiffPercent
+	analysis.OptimalTradeSizeUSD = optimalTradeSizeUSD
+	analysis.NonUSDTokenSymbol = nonUSDTokenSymbol
+	analysis.NonUSDTokenAmount = optimalTradeSize
+	analysis.MaxProfit = maxProfit
+	analysis.ProfitPercentage = profitPercentage
+	analysis.RiskLevel = riskLevel
+	analysis.Pool1Liquidity = pool1Liquidity
+	analysis.Pool2Liquidity = pool2Liquidity
+	analysis.LiquidityRatio = liquidityRatio
+	analysis.RecommendedAction = recommendedAction
+	analysis.TradeDirection = tradeDirection
+	analysis.EstimatedGasCost = estimatedGasCost
+
+	return &analysis
 }
 
 var (

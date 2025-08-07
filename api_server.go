@@ -165,15 +165,8 @@ func (a *apiServer) HandlerArbitrageCheck(w http.ResponseWriter, r *http.Request
 	pool1 := common.HexToAddress(pool1Addr)
 	pool2 := common.HexToAddress(pool2Addr)
 
-	analysis, err := a.arbitrageAnalyzer.AnalyzeArbitrage(pool1, pool2)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte(fmt.Sprintf("analyze arbitrage error: %v", err)))
-		return
-	}
-
+	analysis := a.arbitrageAnalyzer.AnalyzeArbitrage(pool1, pool2)
 	w.Header().Set("Content-Type", "application/json")
-
 	jsonData, err := json.Marshal(analysis)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)

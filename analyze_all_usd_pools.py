@@ -96,13 +96,25 @@ def save_reports(results):
 try:
     with ThreadPoolExecutor(max_workers=args.threads) as executor:
         futures = [executor.submit(process_pair, token0, token1, pool1, pool2) for token0, token1, pool1, pool2 in all_tasks]
-        for f in tqdm(as_completed(futures), total=total, desc='套利分析'):
+        completed = 0
+        for f in as_completed(futures):
             if stop_flag:
+                print('\n正在取消剩余任务...')
+                # 取消未完成的任务
+                for future in futures:
+                    future.cancel()
                 break
-            r = f.result()
-            if r:
-                results.append(r)
+            try:
+                r = f.result(timeout=1)  # 设置超时避免卡住
+                if r:
+                    results.append(r)
+            except Exception as e:
+                print(f'\n任务执行异常: {e}')
+            completed += 1
+            if completed % 10 == 0 or completed == total:  # 每10个或最后更新进度
+                print(f'\r套利分析: {completed}/{total} ({completed/total:.1%})', end='', flush=True)
 except KeyboardInterrupt:
     print('\n用户中断，正在保存已完成的结果...')
+    stop_flag = True
 finally:
     save_reports(results)
