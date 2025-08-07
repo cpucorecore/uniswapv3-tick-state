@@ -57,6 +57,9 @@ func (aa *ArbitrageAnalyzer) AnalyzeArbitrage(pool1Addr, pool2Addr common.Addres
 	if !pool1State.IsUSDPool() {
 		return nil, fmt.Errorf("pool1 have no usd token")
 	}
+	if pool1State.IsEmptyTicks() {
+		return nil, fmt.Errorf("poo1 have no ticks")
+	}
 	pool2State, err := aa.poolStateGetter.GetPoolState(pool2Addr)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get pool2 state: %v", err)
@@ -64,11 +67,14 @@ func (aa *ArbitrageAnalyzer) AnalyzeArbitrage(pool1Addr, pool2Addr common.Addres
 	if !pool2State.IsUSDPool() {
 		return nil, fmt.Errorf("pool1 have no usd token")
 	}
+	if pool2State.IsEmptyTicks() {
+		return nil, fmt.Errorf("poo2 have no ticks")
+	}
 
 	pool1Tick := int32(pool1State.Global.Tick.Int64())
 	pool2Tick := int32(pool2State.Global.Tick.Int64())
-	pool1PriceUSD := calcUSDPrice(pool1Tick, pool1State.Token0.Address, pool1State.Token1.Address)
-	pool2PriceUSD := calcUSDPrice(pool2Tick, pool2State.Token0.Address, pool2State.Token1.Address)
+	pool1PriceUSD := calcUSDPrice(pool1Tick, pool1State.Token0, pool1State.Token1)
+	pool2PriceUSD := calcUSDPrice(pool2Tick, pool2State.Token0, pool2State.Token1)
 
 	priceDiff := new(big.Float).Sub(pool1PriceUSD, pool2PriceUSD)
 	priceDiffAbs := new(big.Float).Abs(priceDiff)
@@ -173,14 +179,20 @@ func calcTickPrice(tick int32) *big.Float {
 	return new(big.Float).SetFloat64(math.Pow(1.0001, float64(tick)))
 }
 
-func calcUSDPrice(tick int32, addr0, addr1 common.Address) *big.Float {
-	if IsUSD(addr0) {
-		return calcTickPrice(tick)
-	} else if IsUSD(addr1) {
-		return new(big.Float).Quo(big.NewFloat(1), calcTickPrice(tick))
+func calcUSDPrice(tick int32, token0, token1 *Token) *big.Float {
+	price := calcTickPrice(tick)
+	var usdPerNonUSD, decimalFactor *big.Float
+	if IsUSD(token0.Address) {
+		usdPerNonUSD = new(big.Float).Quo(big.NewFloat(1), price)
+		decimalFactor = new(big.Float).SetFloat64(math.Pow10(int(token1.Decimals - token0.Decimals)))
+	} else if IsUSD(token1.Address) {
+		usdPerNonUSD = price
+		decimalFactor = new(big.Float).SetFloat64(math.Pow10(int(token0.Decimals - token1.Decimals)))
 	} else {
 		return bigFloat0
 	}
+	usdPerNonUSD.Mul(usdPerNonUSD, decimalFactor)
+	return usdPerNonUSD
 }
 
 func (aa *ArbitrageAnalyzer) calculateUniswapV3Price(poolState *PoolState) *big.Float {
@@ -230,7 +242,6 @@ func (aa *ArbitrageAnalyzer) calculateLiquidity(poolState *PoolState) *big.Float
 	return new(big.Float).SetInt(prefixSum)
 }
 
-// getTradableAmountInCurrentTickRange 计算当前tick区间的token0和token1可交易数量
 func (aa *ArbitrageAnalyzer) getTradableAmountInCurrentTickRange(poolState *PoolState) (*big.Float, *big.Float) {
 	if poolState == nil || poolState.Global == nil {
 		return big.NewFloat(0), big.NewFloat(0)
@@ -253,7 +264,7 @@ func (aa *ArbitrageAnalyzer) getTradableAmountInCurrentTickRange(poolState *Pool
 	} else {
 		token0Amount = big.NewFloat(0)
 		token1Amount = big.NewFloat(0)
-		Log.Warn("[getTradableAmountInCurrentTickRange] no matching tick range found for currentTick", zap.Int32("currentTick", currentTick))
+		Log.Warn("[getTradableAmountInCurrentTickRange] no matching tick range found for currentTick", zap.String("pool", poolState.Address.String()), zap.Int32("currentTick", currentTick))
 	}
 	Log.Info("[getTradableAmountInCurrentTickRange] final token0 amount", zap.String("value", token0Amount.Text('f', 18)))
 	Log.Info("[getTradableAmountInCurrentTickRange] final token1 amount", zap.String("value", token1Amount.Text('f', 18)))

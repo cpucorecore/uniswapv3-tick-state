@@ -31,6 +31,7 @@ func NewPoolStateGetter(cache Cache, db DB, url string) PoolStateGetter {
 }
 
 func decoratePoolState(poolState *PoolState, pair *Pair) *PoolState {
+	poolState.Address = pair.Address
 	poolState.Token0 = &Token{
 		Address:  pair.Token0Core.Address,
 		Symbol:   pair.Token0Core.Symbol,

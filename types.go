@@ -87,6 +87,7 @@ type Token struct {
 }
 
 type PoolState struct {
+	Address    common.Address
 	Token0     *Token
 	Token1     *Token
 	Global     *PoolGlobalState
@@ -104,6 +105,10 @@ func (s *PoolState) Json() []byte {
 
 func (s *PoolState) IsUSDPool() bool {
 	return IsUSD(s.Token0.Address) || IsUSD(s.Token1.Address)
+}
+
+func (s *PoolState) IsEmptyTicks() bool {
+	return len(s.TickStates) == 0
 }
 
 type CallContractReq struct {
