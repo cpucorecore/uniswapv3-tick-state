@@ -83,14 +83,24 @@ func (aa *ArbitrageAnalyzer) AnalyzeArbitrage(pool1Addr, pool2Addr common.Addres
 	var tradeDirection string
 	var buyPriceUSD, sellPriceUSD *big.Float
 	var buyPool, sellPool *PoolState
-	if pool1PriceUSD.Cmp(pool2PriceUSD) > 0 {
-		tradeDirection = "pool2_to_pool1"
+
+	// 只考虑买入non-USD、卖出换USD能获利的方向
+	if pool1PriceUSD.Cmp(pool2PriceUSD) < 0 {
+		// pool1 non-USD更便宜，买入non-USD in pool1，卖出换USD in pool2
+		tradeDirection = "buy non-USD in pool1, sell in pool2 for USD"
+		buyPriceUSD = pool1PriceUSD
+		sellPriceUSD = pool2PriceUSD
+		buyPool = pool1State
+		sellPool = pool2State
+	} else if pool2PriceUSD.Cmp(pool1PriceUSD) < 0 {
+		// pool2 non-USD更便宜，买入non-USD in pool2，卖出换USD in pool1
+		tradeDirection = "buy non-USD in pool2, sell in pool1 for USD"
 		buyPriceUSD = pool2PriceUSD
 		sellPriceUSD = pool1PriceUSD
 		buyPool = pool2State
 		sellPool = pool1State
 	} else {
-		tradeDirection = "pool1_to_pool2"
+		tradeDirection = "no arbitrage"
 		buyPriceUSD = pool1PriceUSD
 		sellPriceUSD = pool2PriceUSD
 		buyPool = pool1State
