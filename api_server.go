@@ -173,6 +173,7 @@ func (a *apiServer) HandlerArbitrageCheck(w http.ResponseWriter, r *http.Request
 	}
 
 	w.Header().Set("Content-Type", "application/json")
+
 	jsonData, err := json.Marshal(analysis)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)

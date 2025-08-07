@@ -22,14 +22,15 @@ var (
 	BUSDAddr = common.HexToAddress(BUSDAddrStr)
 )
 
-func IsMonitorToken(addr common.Address) bool {
-	return IsSameAddress(addr, WBNBAddr) ||
-		IsSameAddress(addr, WETHAddr) ||
-		IsSameAddress(addr, BTCBAddr) ||
-		IsSameAddress(addr, USDTAddr) ||
+func IsUSD(addr common.Address) bool {
+	return IsSameAddress(addr, USDTAddr) ||
 		IsSameAddress(addr, USDCAddr) ||
 		IsSameAddress(addr, USD1Addr) ||
 		IsSameAddress(addr, BUSDAddr)
+}
+
+func IsMonitorToken(addr common.Address) bool {
+	return IsUSD(addr) // 明确监控的基准代币就是稳定币
 }
 
 func IsMonitorPool(token0, token1 common.Address) bool {

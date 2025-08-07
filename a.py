@@ -28,6 +28,7 @@ with open(INPUT_FILE, newline='') as csvfile:
         # 2. 两两组合
         for pool1, pool2 in combinations(pools, 2):
             params = {'pool1': pool1, 'pool2': pool2}
+            print(f'req {pool1}-{pool2}')
             try:
                 resp = requests.get(API_URL, params=params, timeout=10)
                 if resp.status_code == 200:
@@ -63,7 +64,7 @@ with open(HTML_REPORT, 'w') as f:
     f.write('<html><head><meta charset="utf-8"><title>Arbitrage Report</title></head><body>')
     f.write('<h1>Uniswap V3 跨池套利分析报告</h1>')
     f.write('<table border="1" cellpadding="4" cellspacing="0">')
-    f.write('<tr><th>Token0</th><th>Token1</th><th>Pool1</th><th>Pool2</th><th>利润(ETH)</th><th>详情</th></tr>')
+    f.write('<tr><th>Token0</th><th>Token1</th><th>Pool1</th><th>Pool2</th><th>利润(USD)</th><th>详情</th></tr>')
     for r in results:
         f.write(
             f'<tr><td>{r["token0"]}</td><td>{r["token1"]}</td><td>{r["pool1"]}</td><td>{r["pool2"]}</td>'

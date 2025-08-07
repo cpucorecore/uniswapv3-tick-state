@@ -102,8 +102,8 @@ func (s *PoolState) Json() []byte {
 	return bytes
 }
 
-func (s *PoolState) IsMonitor() bool {
-	return IsMonitorPool(s.Token0.Address, s.Token1.Address)
+func (s *PoolState) IsUSDPool() bool {
+	return IsUSD(s.Token0.Address) || IsUSD(s.Token1.Address)
 }
 
 type CallContractReq struct {
